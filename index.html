@@ -76,6 +76,16 @@
       </div>
       <p class="privacy">사진은 저장하지 않습니다. 읽고 나면 바로 버리고 일시·금액만 남습니다.</p>
       <div id="queue" class="queue"></div>
+      <div class="dump" id="dumpBox" hidden>
+        <div class="dump-head">
+          <span>읽은 내용</span>
+          <span class="dump-btns">
+            <button class="btn ghost" id="dumpCopy">복사</button>
+            <button class="btn ghost" id="dumpClose">닫기</button>
+          </span>
+        </div>
+        <pre id="dumpText"></pre>
+      </div>
     </section>
 
     <section class="ledger">
@@ -245,6 +255,11 @@
   .privacy { margin: 12px 0 0; font-size: 11px; color: var(--muted); }
   .ocr-row { margin: 12px 0 0; display: flex; flex-direction: column; gap: 6px; align-items: center; }
   .ocr-note { font-size: 11px; color: var(--muted); line-height: 1.45; }
+  .dump { margin-top: 12px; border: 1px solid var(--rule); border-radius: 3px; background: rgba(255,255,255,.6); text-align: left; }
+  .dump-head { display: flex; justify-content: space-between; align-items: center; padding: 7px 10px; border-bottom: 1px solid var(--rule); font-size: 11.5px; color: var(--muted); }
+  .dump-btns { display: flex; gap: 5px; }
+  .dump-btns .btn { padding: 3px 8px; font-size: 11px; }
+  .dump pre { margin: 0; padding: 8px 10px; max-height: 200px; overflow: auto; font-family: var(--mono); font-size: 11px; line-height: 1.5; white-space: pre-wrap; word-break: break-all; }
 
   .btn { font-family: var(--sans); font-size: 13px; cursor: pointer; border-radius: 3px; padding: 7px 14px; border: 1px solid var(--ink); background: var(--ink); color: var(--paper); transition: opacity .15s; }
   .btn:hover { opacity: .82; }
@@ -698,12 +713,52 @@
 
   /* --- 기기 안에서 읽기 --- */
   function toInt(s) { const n = parseInt(String(s).replace(/[^\d]/g, ''), 10); return isNaN(n) ? null : n; }
+
+  // 인식이 흔히 틀리는 글자를 숫자로 되돌린다
+  const CONFUSABLE = /[OoQDlI|SsBbZzgqTt]/g;
+  function fixToken(tok) {
+    const alnum = tok.replace(/[^0-9A-Za-z]/g, '');
+    if (!alnum) return tok;
+    const digits = (alnum.match(/\d/g) || []).length;
+    if (!digits) return tok;
+    const conf = (alnum.match(CONFUSABLE) || []).length;
+    if (digits + conf < alnum.length) return tok; // 숫자로 볼 수 없는 글자가 섞임
+    return tok
+      .replace(/[OoQD]/g, '0').replace(/[lI|]/g, '1').replace(/[Ss]/g, '5')
+      .replace(/[Bb]/g, '8').replace(/[Zz]/g, '2').replace(/[gq]/g, '9')
+      .replace(/[Tt]/g, '7');
+  }
+  function normNums(s) {
+    return String(s).split(/\s+/).map(fixToken).join(' ')
+      .replace(/(\d)\s*,\s*(\d)/g, '$1,$2')
+      .replace(/(\d)\s+(\d{3})(?!\d)/g, '$1,$2');
+  }
+
+  // 번호 → 시각 → 날짜 순으로 걷어낸 뒤 금액 후보만 고른다
+  function moneyIn(s) {
+    const t = normNums(s)
+      .replace(/\d[\d*-]{6,}/g, ' ')
+      .replace(/\d{1,2}\s*:\s*\d{2}(\s*:\s*\d{2})?/g, ' ')
+      .replace(/\b(?:20)?\d{2}\s*[-./]\s*\d{1,2}\s*[-./]\s*\d{1,2}\b/g, ' ');
+    const out = [];
+    const re = /(\d{1,3}(?:,\d{3})+|\d{2,7})(\s*원)?/g;
+    let m;
+    while ((m = re.exec(t)) !== null) {
+      const hasComma = m[1].indexOf(',') >= 0;
+      const hasWon = !!m[2];
+      const v = toInt(m[1]);
+      if (v == null || v <= 0 || v >= 10000000) continue;
+      if (!hasComma && !hasWon && v >= 1900 && v <= 2100) continue; // 연도로 보임
+      out.push({ v: v, strong: hasComma || hasWon });
+    }
+    return out;
+  }
   function pickMoney(s) {
-    s = String(s);
-    const withWon = s.match(/\d[\d,]*(?=\s*원)/g);
-    const list = (withWon && withWon.length) ? withWon : (s.match(/\d[\d,]*/g) || []);
-    const v = list.map(toInt).filter(n => n != null && n > 0 && n < 10000000);
-    return v.length ? Math.max.apply(null, v) : null;
+    const c = moneyIn(s);
+    if (!c.length) return null;
+    const strong = c.filter(x => x.strong);
+    const pool = strong.length ? strong : c;
+    return Math.max.apply(null, pool.map(x => x.v));
   }
 
   // 인식된 글자 블록을 눈에 보이는 줄로 묶고, 줄의 글자 크기도 함께 남긴다
@@ -736,10 +791,17 @@
       };
     });
   }
-  const NOISE = /사업자|등록번호|승인번호|주문번호|전화|카드번호|일련|가맹점번호|POS|단말/;
+  const NOISE = /사업자|등록번호|승인번호|주문번호|전화|카드|일련|가맹점번호|POS|단말|\*{2,}/;
 
-  const AMT_LABELS = [
-    { re: /요금\s*총액|total\s*fare|총\s*요금/i, w: 7 },
+  let lastLines = [];
+  function showDump() {
+    $('dumpText').textContent = lastLines.length
+      ? lastLines.map(l => String(Math.round(l.h)).padStart(3, ' ') + ' | ' + l.t).join('\n')
+      : '(인식된 글자 없음)';
+    $('dumpBox').hidden = false;
+  }
+
+  const AMT_LABELS = [    { re: /요금\s*총액|total\s*fare|총\s*요금/i, w: 7 },
     { re: /총\s*금액|총\s*액|합계\s*금액|총\s*계|total\s*amount/i, w: 6 },
     { re: /합\s*계|금액\s*계|total/i, w: 5 },
     { re: /승인\s*금액|카드\s*승인/, w: 4 },
@@ -747,7 +809,8 @@
   ];
   const DATE_LABEL = /일\s*시|일\s*자|거래\s*일|date|승차|탑승/i;
 
-  function grabDate(s) {
+  function grabDate(raw) {
+    const s = normNums(raw);
     let m = s.match(/(20\d{2})\s*[-./년]\s*(\d{1,2})\s*[-./월]\s*(\d{1,2})/);
     let y, mo, dd;
     if (m) { y = +m[1]; mo = +m[2]; dd = +m[3]; }
@@ -855,7 +918,7 @@
       () => enhance(base, 1.4, false)
     ];
 
-    let bestParse = null, bestScore = -1, sawText = false;
+    let bestParse = null, bestScore = -1, sawText = false, bestLines = null;
     for (const make of passes) {
       let src = null;
       try {
@@ -865,7 +928,7 @@
           sawText = true;
           const p = parseReceiptText(lines);
           const sc = scoreParse(p, lines.length);
-          if (sc > bestScore) { bestScore = sc; bestParse = p; }
+          if (sc > bestScore) { bestScore = sc; bestParse = p; bestLines = lines; }
           if (p.amount && p.date) break; // 둘 다 잡혔으면 그만
         }
       } catch (e) { /* 이 방식은 실패 — 다음으로 */ }
@@ -874,6 +937,7 @@
     if (base.close) base.close();
 
     if (!sawText) throw new Error('글자를 인식하지 못했습니다');
+    lastLines = bestLines || [];
     const r = bestParse || { date: '', place: '', amount: 0 };
 
     const slim = !!TABS.find(t => t.id === target).slim;
@@ -946,6 +1010,7 @@
     const out = await w.recognize(file, {}, { text: true, blocks: true });
     const lines = tessToLines(out.data || {});
     if (!lines.length) throw new Error('글자를 인식하지 못했습니다');
+    lastLines = lines;
 
     const r = parseReceiptText(lines);
     const slim = !!TABS.find(t => t.id === target).slim;
@@ -995,6 +1060,7 @@
             (okAmt ? ' · 확인 후 수정하세요' : ' — 금액을 입력하세요') + '</span>';
           pendingFocus = { id: rec.id, field: 'amount' };
           save(); render();
+          if (!okAmt || !okDate) showDump(); else $('dumpBox').hidden = true;
           setTimeout(() => node.remove(), okAmt ? 4000 : 7000);
         } catch (e2) {
           node.className = 'qitem err';
@@ -1215,6 +1281,13 @@
   window.addEventListener('offline', syncStatusIdle);
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') syncNow(); });
   setInterval(() => { if (document.visibilityState === 'visible') syncNow(); }, 30000);
+
+  $('dumpClose').addEventListener('click', () => { $('dumpBox').hidden = true; });
+  $('dumpCopy').addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText($('dumpText').textContent); $('dumpCopy').textContent = '복사됨'; }
+    catch (e) { $('dumpCopy').textContent = '복사 실패'; }
+    setTimeout(() => { $('dumpCopy').textContent = '복사'; }, 1500);
+  });
 
   function refreshOcrRow() {
     const builtIn = ('TextDetector' in window) && window.createImageBitmap;
