@@ -700,7 +700,7 @@
     return v.length ? Math.max.apply(null, v) : null;
   }
 
-  // 인식된 글자 블록을 눈에 보이는 줄 단위로 묶는다 (라벨과 금액이 한 줄에 오도록)
+  // 인식된 글자 블록을 눈에 보이는 줄로 묶고, 줄의 글자 크기도 함께 남긴다
   function blocksToLines(blocks) {
     const items = blocks.map(b => ({
       x: b.boundingBox.x, y: b.boundingBox.y, h: b.boundingBox.height,
@@ -720,60 +720,156 @@
       line.cy = line.parts.reduce((s, p) => s + p.y + p.h / 2, 0) / line.parts.length;
     });
     lines.sort((a, b) => a.cy - b.cy);
-    return lines.map(l => l.parts.sort((a, b) => a.x - b.x).map(p => p.t).join(' '));
+
+    return lines.map(l => {
+      const parts = l.parts.sort((a, b) => a.x - b.x);
+      return {
+        t: parts.map(p => p.t).join(' '),
+        h: Math.max.apply(null, parts.map(p => p.h)),
+        y: l.cy
+      };
+    });
   }
   const NOISE = /사업자|등록번호|승인번호|주문번호|전화|카드번호|일련|가맹점번호|POS|단말/;
 
-  function parseReceiptText(text) {
-    const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
-    const joined = lines.join('\n');
-    const labels = [
-      { re: /총\s*금액|총\s*액|합계\s*금액|총\s*계/, w: 5 },
-      { re: /합\s*계|금액\s*계/, w: 4 },
-      { re: /승인\s*금액|카드\s*승인/, w: 3 },
-      { re: /결제\s*금액|받은\s*금액|받을\s*금액|청구\s*금액|판매\s*금액|금\s*액/, w: 2 }
-    ];
+  const AMT_LABELS = [
+    { re: /요금\s*총액|total\s*fare|총\s*요금/i, w: 7 },
+    { re: /총\s*금액|총\s*액|합계\s*금액|총\s*계|total\s*amount/i, w: 6 },
+    { re: /합\s*계|금액\s*계|total/i, w: 5 },
+    { re: /승인\s*금액|카드\s*승인/, w: 4 },
+    { re: /결제\s*금액|받은\s*금액|받을\s*금액|청구\s*금액|판매\s*금액/, w: 3 }
+  ];
+  const DATE_LABEL = /일\s*시|일\s*자|거래\s*일|date|승차|탑승/i;
+
+  function grabDate(s) {
+    let m = s.match(/(20\d{2})\s*[-./년]\s*(\d{1,2})\s*[-./월]\s*(\d{1,2})/);
+    let y, mo, dd;
+    if (m) { y = +m[1]; mo = +m[2]; dd = +m[3]; }
+    else {
+      m = s.match(/\b(\d{2})[-./](\d{1,2})[-./](\d{1,2})\b/);
+      if (!m) return null;
+      y = 2000 + +m[1]; mo = +m[2]; dd = +m[3];
+    }
+    if (mo < 1 || mo > 12 || dd < 1 || dd > 31) return null;
+    const t = s.match(/(\d{1,2})\s*:\s*(\d{2})/);
+    const hh = t ? Math.min(23, +t[1]) : 0;
+    const mi = t ? t[2] : '00';
+    return y + '-' + pad(mo) + '-' + pad(dd) + ' ' + pad(hh) + ':' + mi;
+  }
+
+  function parseReceiptText(lines) {
+    const texts = lines.map(l => l.t);
+    const joined = texts.join('\n');
+
+    /* --- 일시: 라벨이 있는 줄을 먼저 본다 --- */
+    let date = null;
+    for (let i = 0; i < lines.length && !date; i++) {
+      if (!DATE_LABEL.test(texts[i])) continue;
+      date = grabDate(texts[i]);
+      if (!date && texts[i + 1]) date = grabDate(texts[i] + ' ' + texts[i + 1]);
+    }
+    if (!date) for (let i = 0; i < texts.length && !date; i++) date = grabDate(texts[i]);
+    if (!date) date = grabDate(joined.replace(/\n/g, ' '));
+
+    /* --- 금액: 라벨 우선, 없으면 가장 큰 글씨 --- */
     let best = null;
-    lines.forEach((l, i) => {
-      labels.forEach(lb => {
-        if (!lb.re.test(l)) return;
-        let v = pickMoney(l.replace(lb.re, ''));
-        if (v == null && lines[i + 1]) v = pickMoney(lines[i + 1]);
+    lines.forEach((ln, i) => {
+      AMT_LABELS.forEach(lb => {
+        if (!lb.re.test(ln.t)) return;
+        let v = pickMoney(ln.t.replace(lb.re, ''));
+        if (v == null && lines[i + 1]) v = pickMoney(lines[i + 1].t);
+        if (v == null && lines[i + 2]) v = pickMoney(lines[i + 2].t);
         if (v != null && v > 0 && (!best || lb.w > best.w)) best = { v: v, w: lb.w };
       });
     });
+
     let amount = best ? best.v : 0;
     if (!amount) {
-      const pool = lines.filter(l => !NOISE.test(l)).map(pickMoney).filter(n => n != null && n > 0);
-      amount = pool.length ? Math.max.apply(null, pool) : 0;
+      // 영수증에서 금액은 대개 가장 크게 찍힌다
+      let top = null;
+      lines.forEach(ln => {
+        if (NOISE.test(ln.t)) return;
+        const v = pickMoney(ln.t);
+        if (v == null || v <= 0) return;
+        if (!top || ln.h > top.h * 1.05 || (Math.abs(ln.h - top.h) <= top.h * 0.05 && v > top.v)) {
+          top = { v: v, h: ln.h };
+        }
+      });
+      amount = top ? top.v : 0;
     }
-    let date = '';
-    const d = joined.match(/(20\d{2})\s*[-./년]\s*(\d{1,2})\s*[-./월]\s*(\d{1,2})/);
-    if (d) {
-      const t = joined.match(/(\d{1,2})\s*:\s*(\d{2})/);
-      date = d[1] + '-' + pad(d[2]) + '-' + pad(d[3]) + (t ? ' ' + pad(Math.min(23, +t[1])) + ':' + t[2] : ' 00:00');
-    }
+
+    /* --- 상호 --- */
     let place = '';
     const p = joined.match(/(?:상\s*호|가맹점\s*명)\s*[:：]?\s*([^\n]+)/);
     if (p && !/^(정보|내역|명)$/.test(p[1].trim())) place = p[1].trim();
     if (!place) {
-      const c = lines.find(l => /점$|㈜|\(주\)|주식회사/.test(l) && !NOISE.test(l) && !/주소|정보/.test(l));
+      const c = texts.find(l => /점$|㈜|\(주\)|주식회사|택시/.test(l) && !NOISE.test(l) && !/주소|정보/.test(l));
       if (c) place = c.trim();
     }
-    return { date: date, place: place, amount: amount };
+
+    return { date: date || '', place: place, amount: amount };
+  }
+
+  // 대비를 올리거나 확대한 사본을 만들어 인식률을 높인다
+  async function enhance(bmp, scale, binarize) {
+    const maxEdge = 2600;
+    let w = Math.round(bmp.width * scale), h = Math.round(bmp.height * scale);
+    const cap = Math.min(1, maxEdge / Math.max(w, h));
+    w = Math.max(1, Math.round(w * cap)); h = Math.max(1, Math.round(h * cap));
+
+    const cv = document.createElement('canvas');
+    cv.width = w; cv.height = h;
+    const ctx = cv.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(bmp, 0, 0, w, h);
+    const img = ctx.getImageData(0, 0, w, h), d = img.data;
+    for (let i = 0; i < d.length; i += 4) {
+      const g = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+      const v = binarize ? (g > 150 ? 255 : 0) : Math.max(0, Math.min(255, (g - 112) * 1.8 + 112));
+      d[i] = d[i + 1] = d[i + 2] = v;
+    }
+    ctx.putImageData(img, 0, 0);
+    const out = await createImageBitmap(cv);
+    cv.width = cv.height = 0;
+    return out;
+  }
+
+  function scoreParse(p, lineCount) {
+    return (p.amount ? 100 : 0) + (p.date ? 60 : 0) + (p.place ? 10 : 0) + Math.min(20, lineCount);
   }
 
   async function readOnDevice(file, target) {
     if (!('TextDetector' in window) || !window.createImageBitmap) throw new Error('이 브라우저는 기기 인식을 지원하지 않습니다');
-    const bmp = await createImageBitmap(file);
-    let blocks;
-    try { blocks = await new window.TextDetector().detect(bmp); }
-    finally { if (bmp.close) bmp.close(); }
+    const det = new window.TextDetector();
+    const base = await createImageBitmap(file);
 
-    const lines = blocksToLines(blocks || []);
-    if (!lines.length) throw new Error('글자를 인식하지 못했습니다');
+    const passes = [
+      () => Promise.resolve(base),
+      () => enhance(base, 2, false),
+      () => enhance(base, 2, true),
+      () => enhance(base, 1.4, false)
+    ];
 
-    const r = parseReceiptText(lines.join('\n'));
+    let bestParse = null, bestScore = -1, sawText = false;
+    for (const make of passes) {
+      let src = null;
+      try {
+        src = await make();
+        const lines = blocksToLines(await det.detect(src));
+        if (lines.length) {
+          sawText = true;
+          const p = parseReceiptText(lines);
+          const sc = scoreParse(p, lines.length);
+          if (sc > bestScore) { bestScore = sc; bestParse = p; }
+          if (p.amount && p.date) break; // 둘 다 잡혔으면 그만
+        }
+      } catch (e) { /* 이 방식은 실패 — 다음으로 */ }
+      finally { if (src && src !== base && src.close) src.close(); }
+    }
+    if (base.close) base.close();
+
+    if (!sawText) throw new Error('글자를 인식하지 못했습니다');
+    const r = bestParse || { date: '', place: '', amount: 0 };
+
     const slim = !!TABS.find(t => t.id === target).slim;
     const rec = {
       id: uid(),
@@ -783,6 +879,7 @@
       amount: r.amount || 0,
       updated_at: nowISO()
     };
+    rec._readDate = !!r.date;
     store[target].push(rec); markDirty(rec.id);
     return rec;
   }
@@ -811,14 +908,15 @@
         }
         try {
           const rec = await readOnDevice(f, target);
-          node.className = rec.amount ? 'qitem' : 'qitem err';
-          node.innerHTML = rec.amount
-            ? '<span>✓ 기기에서 읽음 — ' + won(rec.amount) + ' · 확인 후 수정하세요</span>'
-            : '<span>△ 일시는 읽었지만 금액을 못 찾았습니다. 금액만 입력하세요.</span>';
+          const okAmt = !!rec.amount, okDate = !!rec._readDate;
+          node.className = okAmt ? 'qitem' : 'qitem err';
+          node.innerHTML = '<span>' + (okAmt ? '✓' : '△') + ' ' +
+            (okAmt ? '금액 ' + won(rec.amount) : '금액 못 읽음') + ' · ' +
+            (okDate ? '일시 ' + esc(rec.date) : '일시는 촬영 시각으로 채움') +
+            (okAmt ? ' · 확인 후 수정하세요' : ' — 금액을 입력하세요') + '</span>';
           pendingFocus = { id: rec.id, field: 'amount' };
           save(); render();
-          if (rec.amount) setTimeout(() => node.remove(), 3200);
-          else setTimeout(() => node.remove(), 6000);
+          setTimeout(() => node.remove(), okAmt ? 4000 : 7000);
         } catch (e2) {
           node.className = 'qitem err';
           node.innerHTML = '<span>✕ ' + esc(e2.message) + ' — 금액을 직접 입력하세요</span>';
@@ -900,7 +998,7 @@
   async function openCam() {
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { $('camFile').click(); return; }
     try {
-      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 } }, audio: false });
+      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 2560 }, height: { ideal: 1440 } }, audio: false });
       const v = $('cam');
       v.srcObject = stream; v.setAttribute('playsinline', '');
       $('camPanel').hidden = false;
@@ -919,12 +1017,12 @@
   async function shoot() {
     const v = $('cam');
     if (!v.videoWidth) return;
-    const scale = Math.min(1, 1600 / Math.max(v.videoWidth, v.videoHeight));
+    const scale = Math.min(1, 2400 / Math.max(v.videoWidth, v.videoHeight));
     const cv = document.createElement('canvas');
     cv.width = Math.round(v.videoWidth * scale);
     cv.height = Math.round(v.videoHeight * scale);
     cv.getContext('2d').drawImage(v, 0, 0, cv.width, cv.height);
-    const blob = await new Promise(r => cv.toBlob(r, 'image/jpeg', 0.85));
+    const blob = await new Promise(r => cv.toBlob(r, 'image/jpeg', 0.92));
     cv.width = cv.height = 0;
     closeCam();
     if (blob) handleFiles([new File([blob], 'scan.jpg', { type: 'image/jpeg', lastModified: Date.now() })]);
