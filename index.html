@@ -693,10 +693,34 @@
   /* --- 기기 안에서 읽기 --- */
   function toInt(s) { const n = parseInt(String(s).replace(/[^\d]/g, ''), 10); return isNaN(n) ? null : n; }
   function pickMoney(s) {
-    const m = String(s).match(/\d[\d,]*/g);
-    if (!m) return null;
-    const v = m.map(toInt).filter(n => n != null && n < 10000000);
+    s = String(s);
+    const withWon = s.match(/\d[\d,]*(?=\s*원)/g);
+    const list = (withWon && withWon.length) ? withWon : (s.match(/\d[\d,]*/g) || []);
+    const v = list.map(toInt).filter(n => n != null && n > 0 && n < 10000000);
     return v.length ? Math.max.apply(null, v) : null;
+  }
+
+  // 인식된 글자 블록을 눈에 보이는 줄 단위로 묶는다 (라벨과 금액이 한 줄에 오도록)
+  function blocksToLines(blocks) {
+    const items = blocks.map(b => ({
+      x: b.boundingBox.x, y: b.boundingBox.y, h: b.boundingBox.height,
+      t: String(b.rawValue || '').trim()
+    })).filter(o => o.t);
+    if (!items.length) return [];
+    items.sort((a, b) => (a.y - b.y) || (a.x - b.x));
+
+    const lines = [];
+    items.forEach(it => {
+      const cy = it.y + it.h / 2;
+      const tol = Math.max(10, it.h * 0.6);
+      let line = null;
+      for (const l of lines) { if (Math.abs(l.cy - cy) < tol) { line = l; break; } }
+      if (!line) { line = { cy: cy, parts: [] }; lines.push(line); }
+      line.parts.push(it);
+      line.cy = line.parts.reduce((s, p) => s + p.y + p.h / 2, 0) / line.parts.length;
+    });
+    lines.sort((a, b) => a.cy - b.cy);
+    return lines.map(l => l.parts.sort((a, b) => a.x - b.x).map(p => p.t).join(' '));
   }
   const NOISE = /사업자|등록번호|승인번호|주문번호|전화|카드번호|일련|가맹점번호|POS|단말/;
 
@@ -704,8 +728,10 @@
     const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
     const joined = lines.join('\n');
     const labels = [
-      { re: /총\s*금액|총액/, w: 5 }, { re: /합\s*계/, w: 4 },
-      { re: /승인\s*금액/, w: 3 }, { re: /결제\s*금액|받은\s*금액|판매\s*금액/, w: 2 }
+      { re: /총\s*금액|총\s*액|합계\s*금액|총\s*계/, w: 5 },
+      { re: /합\s*계|금액\s*계/, w: 4 },
+      { re: /승인\s*금액|카드\s*승인/, w: 3 },
+      { re: /결제\s*금액|받은\s*금액|받을\s*금액|청구\s*금액|판매\s*금액|금\s*액/, w: 2 }
     ];
     let best = null;
     lines.forEach((l, i) => {
@@ -743,14 +769,19 @@
     let blocks;
     try { blocks = await new window.TextDetector().detect(bmp); }
     finally { if (bmp.close) bmp.close(); }
-    const text = blocks.map(b => ({ y: b.boundingBox.y, x: b.boundingBox.x, t: b.rawValue }))
-      .sort((a, b) => (a.y - b.y) || (a.x - b.x)).map(o => o.t).join('\n');
-    const r = parseReceiptText(text);
-    if (!r.amount) throw new Error('금액을 찾지 못했습니다');
+
+    const lines = blocksToLines(blocks || []);
+    if (!lines.length) throw new Error('글자를 인식하지 못했습니다');
+
+    const r = parseReceiptText(lines.join('\n'));
     const slim = !!TABS.find(t => t.id === target).slim;
     const rec = {
-      id: uid(), date: r.date || fmtDT(new Date(file.lastModified || Date.now())),
-      place: slim ? '' : (r.place || ''), items: '', amount: r.amount, updated_at: nowISO()
+      id: uid(),
+      date: r.date || fmtDT(new Date(file.lastModified || Date.now())),
+      place: slim ? '' : (r.place || ''),
+      items: '',
+      amount: r.amount || 0,
+      updated_at: nowISO()
     };
     store[target].push(rec); markDirty(rec.id);
     return rec;
@@ -780,14 +811,17 @@
         }
         try {
           const rec = await readOnDevice(f, target);
-          node.className = 'qitem';
-          node.innerHTML = '<span>✓ 기기에서 읽음 — ' + won(rec.amount) + ' · 확인 후 수정하세요</span>';
+          node.className = rec.amount ? 'qitem' : 'qitem err';
+          node.innerHTML = rec.amount
+            ? '<span>✓ 기기에서 읽음 — ' + won(rec.amount) + ' · 확인 후 수정하세요</span>'
+            : '<span>△ 일시는 읽었지만 금액을 못 찾았습니다. 금액만 입력하세요.</span>';
           pendingFocus = { id: rec.id, field: 'amount' };
           save(); render();
-          setTimeout(() => node.remove(), 3200);
+          if (rec.amount) setTimeout(() => node.remove(), 3200);
+          else setTimeout(() => node.remove(), 6000);
         } catch (e2) {
           node.className = 'qitem err';
-          node.innerHTML = '<span>✕ 자동 읽기 불가 — 금액만 입력하세요</span>';
+          node.innerHTML = '<span>✕ ' + esc(e2.message) + ' — 금액을 직접 입력하세요</span>';
           quickAdd(f.lastModified || Date.now(), 'amount');
         }
       }
