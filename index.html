@@ -1,11 +1,29 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>영수증 트래커</title>
+
 <div id="app">
   <div class="roll">
     <div class="tear top"></div>
 
     <nav class="tabs" id="tabs" role="tablist"></nav>
+
+    <div class="syncbar">
+      <span class="sync-state" id="syncState">동기화 꺼짐</span>
+      <button class="linkbtn" id="syncBtn">기기 연결</button>
+    </div>
+
+    <div class="sync-panel" id="syncPanel" hidden>
+      <p class="sp-note">두 기기에 같은 키를 넣으면 내역이 함께 갑니다. 폰에서 키를 만들고, 데스크톱에 같은 키를 붙여넣으세요.</p>
+      <input id="vaultInput" placeholder="동기화 키" autocomplete="off" spellcheck="false">
+      <div class="sp-actions">
+        <button class="btn" id="vaultSave">연결</button>
+        <button class="btn ghost" id="vaultNew">새 키 만들기</button>
+        <button class="btn ghost" id="vaultCopy">복사</button>
+        <button class="btn ghost danger" id="vaultOff">해제</button>
+      </div>
+      <p class="sp-note" id="vaultNote">키는 이 기기에만 저장됩니다. 잃어버리면 서버의 내역을 다시 볼 수 없으니 어딘가 적어 두세요.</p>
+    </div>
 
     <header class="head">
       <div class="brand">
@@ -44,16 +62,6 @@
       <div class="drop-actions">
         <button class="btn" id="scan" hidden>카메라로 스캔</button>
         <button class="btn" id="pick">이미지 고르기</button>
-        <button class="btn ghost" id="pasteBtn">텍스트 붙여넣기</button>
-      </div>
-      <div class="paste-panel" id="pastePanel" hidden>
-        <p class="paste-help">폰 사진에서 글자를 길게 눌러 복사한 뒤 여기에 붙여넣으세요. 일시와 금액을 찾아 넣습니다.</p>
-        <textarea id="pasteText" rows="4" placeholder="영수증에서 인식한 글자를 붙여넣기"></textarea>
-        <div class="paste-actions">
-          <button class="btn ghost" id="pasteFromClip">클립보드에서 가져오기</button>
-          <button class="btn" id="pasteRead">읽어서 추가</button>
-          <button class="btn ghost" id="pasteClose">닫기</button>
-        </div>
       </div>
       <div class="cam-panel" id="camPanel" hidden>
         <video id="cam" playsinline muted></video>
@@ -62,7 +70,7 @@
           <button class="btn ghost" id="camClose">닫기</button>
         </div>
       </div>
-      <p class="privacy">사진은 저장하지 않습니다. 읽고 나면 바로 버리고 일시·금액만 남습니다.<br>앱 밖에서는 폰 안에서만 인식하며, 사진이 밖으로 나가지 않습니다.</p>
+      <p class="privacy">사진은 저장하지 않습니다. 읽고 나면 바로 버리고 일시·금액만 남습니다.</p>
       <div id="queue" class="queue"></div>
     </section>
 
@@ -99,7 +107,7 @@
     <footer class="foot">
       <span id="saveState">저장됨</span>
       <span id="diag"></span>
-      <button class="btn ghost danger" id="reset">이 탭 내역 지우기</button>
+      <button class="btn ghost danger" id="reset">이 탭 지우기</button>
     </footer>
 
     <div class="tear bottom"></div>
@@ -143,7 +151,7 @@
   }
   .tear.top { transform: scaleY(-1); }
 
-  .tabs { display: flex; gap: 0; padding: 14px 26px 0; border-bottom: 1px solid var(--ink); }
+  .tabs { display: flex; padding: 14px 26px 0; border-bottom: 1px solid var(--ink); }
   .tab {
     flex: 1; appearance: none; cursor: pointer; font-family: var(--sans);
     background: transparent; border: 1px solid var(--rule); border-bottom: 0;
@@ -152,7 +160,7 @@
     display: flex; flex-direction: column; gap: 2px; align-items: center;
   }
   .tab + .tab { margin-left: -1px; }
-  .tab span.n { font-family: var(--mono); font-size: 11px; letter-spacing: -.01em; }
+  .tab span.n { font-family: var(--mono); font-size: 11px; }
   .tab[aria-selected="true"] {
     background: var(--paper); color: var(--ink); font-weight: 600;
     border-color: var(--ink); border-bottom: 1px solid var(--paper);
@@ -160,21 +168,43 @@
   }
   .tab:focus-visible { outline: 2px solid var(--stamp); outline-offset: -3px; }
 
-  .head { padding: 22px 26px 18px; position: relative; }
-  .brand {
-    display: flex; align-items: center; gap: 8px;
-    font-size: 11px; letter-spacing: .18em; color: var(--muted); font-family: var(--mono);
+  .syncbar {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 8px 26px 0; font-family: var(--mono); font-size: 11px; color: var(--muted);
   }
+  .sync-state::before {
+    content: ""; display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+    background: var(--rule); margin-right: 6px; vertical-align: 1px;
+  }
+  .sync-state.on::before { background: var(--fill); }
+  .sync-state.wait::before { background: var(--warn); }
+  .sync-state.err::before { background: var(--stamp); }
+  .linkbtn {
+    background: none; border: 0; padding: 0; cursor: pointer; color: var(--ink);
+    font-family: var(--mono); font-size: 11px; text-decoration: underline;
+  }
+
+  .sync-panel { margin: 10px 26px 0; padding: 12px; border: 1px solid var(--ink); border-radius: 3px; background: rgba(255,255,255,.5); }
+  .sp-note { margin: 0 0 8px; font-size: 11.5px; color: var(--muted); }
+  #vaultNote { margin: 8px 0 0; }
+  #vaultInput {
+    width: 100%; padding: 9px 10px; border: 1px solid var(--rule); border-radius: 3px;
+    font-family: var(--mono); font-size: 12.5px; background: var(--paper); color: var(--ink);
+  }
+  .sp-actions { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+  .sp-actions .btn { padding: 6px 10px; font-size: 12px; }
+
+  .head { padding: 18px 26px; position: relative; }
+  .brand { display: flex; align-items: center; gap: 8px; font-size: 11px; letter-spacing: .18em; color: var(--muted); font-family: var(--mono); }
   .brand .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--fill); }
   .head h1 {
     font-family: var(--mono); font-size: clamp(36px, 8.6vw, 58px);
-    font-weight: 600; letter-spacing: -.03em; margin: 10px 0 2px;
-    font-variant-numeric: tabular-nums;
+    font-weight: 600; letter-spacing: -.03em; margin: 10px 0 2px; font-variant-numeric: tabular-nums;
   }
   .head h1.over { color: var(--stamp); }
   .sub { margin: 0; font-size: 13px; color: var(--muted); }
   .stamp {
-    position: absolute; top: 20px; right: 22px;
+    position: absolute; top: 18px; right: 22px;
     font-family: var(--mono); font-size: 13px; font-weight: 700;
     color: var(--stamp); border: 2px solid var(--stamp);
     padding: 5px 11px; border-radius: 3px; transform: rotate(-7deg); opacity: .9;
@@ -190,55 +220,27 @@
   .gauge-labels { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 11px; color: var(--muted); margin-top: 6px; }
   .gauge-labels span:nth-child(2) { color: var(--ink); font-weight: 600; }
 
-  .stats {
-    display: grid; grid-template-columns: repeat(4, 1fr);
-    border-top: 1px dashed var(--rule); border-bottom: 1px dashed var(--rule); margin: 0 26px;
-  }
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px dashed var(--rule); border-bottom: 1px dashed var(--rule); margin: 0 26px; }
   .stat { padding: 12px 0; display: flex; flex-direction: column; gap: 3px; }
   .stat + .stat { border-left: 1px dashed var(--rule); padding-left: 12px; }
   .stat .k { font-size: 11px; color: var(--muted); }
   .stat .v { font-family: var(--mono); font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }
 
-  .alert {
-    margin: 16px 26px 0; padding: 10px 12px; font-size: 12.5px; border-radius: 3px;
-    border-left: 3px solid var(--stamp); background: rgba(176,58,46,.08); color: var(--stamp);
-  }
+  .alert { margin: 16px 26px 0; padding: 10px 12px; font-size: 12.5px; border-radius: 3px; border-left: 3px solid var(--stamp); background: rgba(176,58,46,.08); color: var(--stamp); }
   .alert.warn { border-left-color: var(--warn); background: rgba(168,118,42,.1); color: var(--warn); }
 
-  .drop {
-    margin: 20px 26px; padding: 22px 18px; text-align: center;
-    border: 1.5px dashed var(--rule); border-radius: 4px;
-    background: rgba(255,255,255,.35); transition: border-color .2s, background .2s;
-  }
+  .drop { margin: 20px 26px; padding: 22px 18px; text-align: center; border: 1.5px dashed var(--rule); border-radius: 4px; background: rgba(255,255,255,.35); transition: border-color .2s, background .2s; }
   .drop.over { border-color: var(--fill); background: rgba(63,107,79,.08); }
   .drop-title { margin: 0 0 4px; font-size: 14px; font-weight: 600; }
   .drop-sub { margin: 0 0 14px; font-size: 12px; color: var(--muted); }
   .drop-actions { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
   .cam-panel { margin-top: 14px; }
-  .cam-panel video {
-    width: 100%; max-height: 52vh; border-radius: 3px; background: #000;
-    display: block; object-fit: contain;
-  }
+  .cam-panel video { width: 100%; max-height: 52vh; border-radius: 3px; background: #000; display: block; object-fit: contain; }
   .cam-actions { display: flex; gap: 8px; margin-top: 8px; }
   .cam-actions .btn { flex: 1; padding: 12px; font-size: 14px; }
   .privacy { margin: 12px 0 0; font-size: 11px; color: var(--muted); }
 
-  .paste-panel { margin-top: 14px; text-align: left; }
-  .paste-help { margin: 0 0 8px; font-size: 11.5px; color: var(--muted); }
-  #pasteText {
-    width: 100%; font-family: var(--mono); font-size: 12.5px; line-height: 1.45;
-    padding: 10px; border: 1px solid var(--rule); border-radius: 3px;
-    background: rgba(255,255,255,.7); color: var(--ink); resize: vertical;
-  }
-  #pasteText:focus { outline: 0; border-color: var(--ink); }
-  .paste-actions { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
-  .paste-actions .btn { padding: 6px 12px; font-size: 12.5px; }
-
-  .btn {
-    font-family: var(--sans); font-size: 13px; cursor: pointer; border-radius: 3px;
-    padding: 7px 14px; border: 1px solid var(--ink); background: var(--ink);
-    color: var(--paper); transition: opacity .15s;
-  }
+  .btn { font-family: var(--sans); font-size: 13px; cursor: pointer; border-radius: 3px; padding: 7px 14px; border: 1px solid var(--ink); background: var(--ink); color: var(--paper); transition: opacity .15s; }
   .btn:hover { opacity: .82; }
   .btn:focus-visible { outline: 2px solid var(--stamp); outline-offset: 2px; }
   .btn.ghost { background: transparent; color: var(--ink); border-color: var(--rule); }
@@ -251,16 +253,18 @@
   @keyframes sp { to { transform: rotate(360deg); } }
 
   .ledger { padding: 0 26px; }
-  .ledger-head { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+  .ledger-head { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--muted); margin-bottom: 8px; gap: 8px; flex-wrap: wrap; }
   .ledger-head em { font-style: normal; font-family: var(--mono); color: var(--ink); font-weight: 600; }
-  .tools { display: flex; gap: 6px; }
+  .tools { display: flex; gap: 6px; flex-wrap: wrap; }
   .tools .btn { padding: 5px 10px; font-size: 12px; }
 
+  .import-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; margin-bottom: 10px; padding: 10px 12px; border: 1px solid var(--ink); border-radius: 3px; background: rgba(255,255,255,.55); font-size: 12.5px; }
+  .import-bar.err { border-color: var(--stamp); color: var(--stamp); }
+  .ib-actions { display: flex; gap: 6px; }
+  .ib-actions .btn { padding: 5px 10px; font-size: 12px; }
+
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  thead th {
-    font-size: 10.5px; letter-spacing: .1em; color: var(--muted); font-weight: 500;
-    text-align: left; padding: 6px 4px; border-bottom: 1px solid var(--ink);
-  }
+  thead th { font-size: 10.5px; letter-spacing: .1em; color: var(--muted); font-weight: 500; text-align: left; padding: 6px 4px; border-bottom: 1px solid var(--ink); }
   tbody td { padding: 2px 4px; border-bottom: 1px dotted var(--rule); vertical-align: middle; }
   tfoot td { padding: 10px 4px; font-family: var(--mono); font-weight: 700; border-top: 1px solid var(--ink); font-variant-numeric: tabular-nums; }
   .c-amt { text-align: right; }
@@ -275,29 +279,16 @@
   .del { border: 0; background: transparent; color: var(--rule); cursor: pointer; font-size: 15px; line-height: 1; padding: 4px; }
   .del:hover { color: var(--stamp); }
 
-  .import-bar {
-    display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
-    justify-content: space-between; margin-bottom: 10px; padding: 10px 12px;
-    border: 1px solid var(--ink); border-radius: 3px; background: rgba(255,255,255,.55);
-    font-size: 12.5px;
-  }
-  .import-bar.err { border-color: var(--stamp); color: var(--stamp); }
-  .ib-actions { display: flex; gap: 6px; }
-  .ib-actions .btn { padding: 5px 10px; font-size: 12px; }
-
   .empty { font-size: 12.5px; color: var(--muted); text-align: center; padding: 20px 0; margin: 0; }
-  .foot {
-    display: flex; justify-content: space-between; align-items: center;
-    padding: 18px 26px 20px; margin-top: 10px; border-top: 1px dashed var(--rule);
-    font-family: var(--mono); font-size: 11px; color: var(--muted);
-  }
+  .foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; padding: 18px 26px 20px; margin-top: 10px; border-top: 1px dashed var(--rule); font-family: var(--mono); font-size: 11px; color: var(--muted); }
+  .foot .btn { font-size: 11px; padding: 4px 9px; }
 
   @media (max-width: 560px) {
     .stats { grid-template-columns: 1fr 1fr; }
     .stat:nth-child(3) { border-left: 0; padding-left: 0; }
     .stat:nth-child(3), .stat:nth-child(4) { border-top: 1px dashed var(--rule); }
-    .head, .gauge-wrap, .ledger, .foot, .tabs { padding-left: 16px; padding-right: 16px; }
-    .stats, .drop, .alert { margin-left: 16px; margin-right: 16px; }
+    .head, .gauge-wrap, .ledger, .foot, .tabs, .syncbar { padding-left: 16px; padding-right: 16px; }
+    .stats, .drop, .alert, .sync-panel { margin-left: 16px; margin-right: 16px; }
     .c-item, thead th.c-item { display: none; }
     .tab { font-size: 11.5px; padding: 8px 3px; }
     .tab strong { white-space: nowrap; }
@@ -320,81 +311,186 @@
 
 <script>
 (function () {
+  /* ================= 설정 ================= */
+  const SB_URL = 'https://wkevtnuzwnnvaqjqxdef.supabase.co';
+  const SB_KEY = 'sb_publishable_TL55MXZpZcg-yXAWh9UCOg_hZGOk5Yf';
   const DEADLINE = new Date(2026, 8, 14, 23, 59, 59); // 2026-09-14
-  const KEY = 'receipts:v2';
-  const OLD_KEY = 'receipts:goal600k';
+  const KEY = 'receipts:v3';
+  const VKEY = 'receipts:vault';
 
   const TABS = [
-    { id: 'cash', label: '현금영수증', goal: 600000, mode: 'target',
-      hint: '지출증명용 현금영수증을 올리세요' },
-    { id: 'card', label: '카드 영수증', goal: 200000, mode: 'target',
-      hint: '카드 매출전표를 올리세요' },
-    { id: 'taxi', label: '택시 영수증', goal: 600000, mode: 'cap', slim: true,
-      hint: '택시 영수증을 올리세요. 일시와 금액만 기록합니다' }
+    { id: 'cash', label: '현금영수증', goal: 600000, mode: 'target', hint: '지출증명용 현금영수증을 올리세요' },
+    { id: 'card', label: '카드 영수증', goal: 200000, mode: 'target', hint: '카드 매출전표를 올리세요' },
+    { id: 'taxi', label: '택시 영수증', goal: 600000, mode: 'cap', slim: true, hint: '택시 영수증을 올리세요. 일시와 금액만 기록합니다' }
   ];
+  const BLANK = () => ({ cash: [], card: [], taxi: [], _del: {}, _dirty: [] });
 
-  let store = { cash: [], card: [], taxi: [] };
+  let store = BLANK();
   let active = 'cash';
+  let vault = null;
+  let pendingFocus = null;
+  let syncTimer = null;
 
   const $ = id => document.getElementById(id);
   const won = n => Math.round(n).toLocaleString('ko-KR') + '원';
   const uid = () => 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
   const pad = n => String(n).padStart(2, '0');
-  const fmtDT = d => d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) +
-                     ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
-  let pendingFocus = null;
-  let autoReadDown = false;
+  const fmtDT = d => d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+  const nowISO = () => new Date().toISOString();
   const cfg = () => TABS.find(t => t.id === active);
   const rows = () => store[active];
   const sum = id => store[id].reduce((s, r) => s + (Number(r.amount) || 0), 0);
-  const daysLeft = () => {
-    const t = new Date(); t.setHours(0, 0, 0, 0);
-    return Math.max(1, Math.ceil((DEADLINE - t) / 86400000));
-  };
+  const daysLeft = () => { const t = new Date(); t.setHours(0, 0, 0, 0); return Math.max(1, Math.ceil((DEADLINE - t) / 86400000)); };
+  const esc = s => String(s == null ? '' : s).replace(/"/g, '&quot;').replace(/</g, '&lt;');
+  const hhmm = () => new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
 
-  /* ---------- storage: 앱 안이면 앱 저장소, 밖이면 이 브라우저에 저장 ---------- */
+  /* ================= 로컬 저장 ================= */
   const hasAppStore = !!(window.storage && typeof window.storage.get === 'function');
   const LS = (function () {
     try { localStorage.setItem('__t', '1'); localStorage.removeItem('__t'); return localStorage; }
     catch (e) { return null; }
   })();
   let storeMode = hasAppStore ? 'app' : (LS ? 'local' : 'memory');
+  const MODE_TEXT = { app: '앱에 저장', local: '이 브라우저에 저장', memory: '임시 저장' };
 
-  const MODE_TEXT = { app: '앱에 저장', local: '이 브라우저에 저장', memory: '임시 — CSV로 백업하세요' };
-
-  async function load() {
-    let loaded = null;
-    if (storeMode === 'app') {
-      try { const r = await window.storage.get(KEY); loaded = r ? JSON.parse(r.value) : null; } catch (e) {}
-      if (!loaded) {
-        try { const r = await window.storage.get(OLD_KEY); const o = r ? JSON.parse(r.value) : null; if (o && o.length) loaded = { cash: o, card: [], taxi: [] }; } catch (e) {}
-      }
-    } else if (storeMode === 'local') {
-      try { const v = LS.getItem(KEY); loaded = v ? JSON.parse(v) : null; } catch (e) {}
-    }
-
-    if (loaded) { store = Object.assign({ cash: [], card: [], taxi: [] }, loaded); return; }
-    store = { cash: [], card: [], taxi: [] };
-    await save();
+  async function loadLocal() {
+    let raw = null;
+    if (storeMode === 'app') { try { const r = await window.storage.get(KEY); raw = r ? r.value : null; } catch (e) {} }
+    else if (storeMode === 'local') { try { raw = LS.getItem(KEY); } catch (e) {} }
+    if (raw) { try { store = Object.assign(BLANK(), JSON.parse(raw)); } catch (e) { store = BLANK(); } }
+    if (LS) { try { vault = LS.getItem(VKEY); } catch (e) {} }
+    if (!vault && storeMode === 'app') { try { const r = await window.storage.get(VKEY); vault = r ? r.value : null; } catch (e) {} }
   }
 
-  async function save() {
+  async function saveLocal() {
     const json = JSON.stringify(store);
     try {
       if (storeMode === 'app') await window.storage.set(KEY, json);
       else if (storeMode === 'local') LS.setItem(KEY, json);
       else throw new Error('memory');
-      $('saveState').textContent = MODE_TEXT[storeMode] + ' · ' +
-        new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+      $('saveState').textContent = MODE_TEXT[storeMode] + ' · ' + hhmm();
     } catch (e) {
-      if (storeMode === 'app' && LS) { storeMode = 'local'; return save(); }
+      if (storeMode === 'app' && LS) { storeMode = 'local'; return saveLocal(); }
       storeMode = 'memory';
       $('saveState').textContent = MODE_TEXT.memory;
     }
-    $('memWarn').hidden = storeMode !== 'memory';
+    $('memWarn').hidden = !(storeMode === 'memory' && !vault);
   }
 
-  /* ---------- render ---------- */
+  async function saveVault(v) {
+    vault = v || null;
+    try { if (LS) { v ? LS.setItem(VKEY, v) : LS.removeItem(VKEY); } } catch (e) {}
+    if (storeMode === 'app') { try { await window.storage.set(VKEY, v || ''); } catch (e) {} }
+  }
+
+  // 로컬 저장 + 서버 반영 예약
+  function save() { saveLocal(); scheduleSync(); }
+
+  /* ================= 동기화 ================= */
+  function findRec(id) {
+    for (const t of TABS) {
+      const i = store[t.id].findIndex(r => r.id === id);
+      if (i >= 0) return { kind: t.id, rec: store[t.id][i], index: i };
+    }
+    return null;
+  }
+  function markDirty(id) { if (store._dirty.indexOf(id) < 0) store._dirty.push(id); }
+  function touch(rec) { rec.updated_at = nowISO(); markDirty(rec.id); }
+
+  function setSync(state, text) {
+    const el = $('syncState');
+    el.className = 'sync-state' + (state ? ' ' + state : '');
+    el.textContent = text;
+  }
+  function syncStatusIdle() {
+    if (!vault) return setSync('', '동기화 꺼짐');
+    if (!navigator.onLine) return setSync('wait', '오프라인 · 대기 ' + store._dirty.length + '건');
+    if (store._dirty.length) return setSync('wait', '올리는 중 ' + store._dirty.length + '건');
+    setSync('on', '동기화됨 · ' + hhmm());
+  }
+
+  const headers = () => ({
+    'apikey': SB_KEY,
+    'Authorization': 'Bearer ' + SB_KEY,
+    'x-vault': vault,
+    'Content-Type': 'application/json'
+  });
+
+  function toRow(rec, kind, deleted) {
+    return {
+      id: rec.id, vault: vault, kind: kind,
+      occurred_at: rec.date || '', place: rec.place || '', items: rec.items || '',
+      amount: Number(rec.amount) || 0, deleted: !!deleted,
+      updated_at: rec.updated_at || nowISO()
+    };
+  }
+
+  async function push() {
+    if (!vault || !store._dirty.length || !navigator.onLine) return;
+    const batch = [];
+    store._dirty.forEach(id => {
+      const f = findRec(id);
+      if (f) batch.push(toRow(f.rec, f.kind, false));
+      else if (store._del[id]) batch.push(toRow({ id: id, updated_at: store._del[id].at }, store._del[id].kind, true));
+    });
+    if (!batch.length) { store._dirty = []; return saveLocal(); }
+
+    const res = await fetch(SB_URL + '/rest/v1/receipts', {
+      method: 'POST',
+      headers: Object.assign(headers(), { 'Prefer': 'resolution=merge-duplicates,return=minimal' }),
+      body: JSON.stringify(batch)
+    });
+    if (!res.ok) throw new Error('올리기 실패 ' + res.status);
+    store._dirty = [];
+    await saveLocal();
+  }
+
+  async function pull() {
+    if (!vault || !navigator.onLine) return;
+    const url = SB_URL + '/rest/v1/receipts?select=id,kind,occurred_at,place,items,amount,deleted,updated_at' +
+                '&vault=eq.' + encodeURIComponent(vault);
+    const res = await fetch(url, { headers: headers() });
+    if (!res.ok) throw new Error('받기 실패 ' + res.status);
+    const remote = await res.json();
+
+    remote.forEach(row => {
+      if (store._dirty.indexOf(row.id) >= 0) return; // 아직 못 올린 내 수정이 우선
+      const local = findRec(row.id);
+      const localAt = local ? (local.rec.updated_at || '') : (store._del[row.id] ? store._del[row.id].at : '');
+      if (localAt && localAt >= row.updated_at) return;
+
+      if (local) store[local.kind].splice(local.index, 1);
+      if (row.deleted) { store._del[row.id] = { at: row.updated_at, kind: row.kind }; return; }
+      delete store._del[row.id];
+      if (!store[row.kind]) return;
+      store[row.kind].push({
+        id: row.id, date: row.occurred_at || '', place: row.place || '',
+        items: row.items || '', amount: Number(row.amount) || 0, updated_at: row.updated_at
+      });
+    });
+    await saveLocal();
+  }
+
+  async function syncNow() {
+    if (!vault) { syncStatusIdle(); return; }
+    if (!navigator.onLine) { syncStatusIdle(); return; }
+    setSync('wait', '동기화 중…');
+    try {
+      await push();
+      await pull();
+      render();
+      syncStatusIdle();
+    } catch (e) {
+      setSync('err', '동기화 오류 · 대기 ' + store._dirty.length + '건');
+    }
+  }
+
+  function scheduleSync() {
+    clearTimeout(syncTimer);
+    syncTimer = setTimeout(syncNow, 800);
+  }
+
+  /* ================= 화면 ================= */
   function renderTabs() {
     const nav = $('tabs');
     nav.innerHTML = '';
@@ -403,8 +499,9 @@
       b.className = 'tab'; b.type = 'button'; b.setAttribute('role', 'tab');
       b.setAttribute('aria-selected', String(t.id === active));
       const used = sum(t.id);
-      const mark = t.mode === 'cap' ? (used > t.goal ? '한도 초과' : '한도까지 ' + won(t.goal - used))
-                                    : (used >= t.goal ? '달성' : won(t.goal - used) + ' 남음');
+      const mark = t.mode === 'cap'
+        ? (used > t.goal ? '한도 초과' : '한도까지 ' + won(t.goal - used))
+        : (used >= t.goal ? '달성' : won(t.goal - used) + ' 남음');
       b.innerHTML = '<strong>' + t.label + '</strong><span class="n">' + mark + '</span>';
       b.addEventListener('click', () => { active = t.id; hideImportBar(); render(); });
       nav.appendChild(b);
@@ -452,10 +549,9 @@
       $('k1').textContent = '누적 금액'; $('v1').textContent = won(used);
       $('k3').textContent = '하루 평균 여유'; $('v3').textContent = over ? '없음' : won(gap / d);
       $('k4').textContent = '한도 소진율'; $('v4').textContent = pct.toFixed(1) + '%';
-
       if (over) {
         alert.hidden = false;
-        alert.textContent = '누적 ' + won(used) + '으로 한도를 ' + won(used - c.goal) + ' 넘었습니다. 일부 건을 다른 항목으로 옮기거나 제외하세요.';
+        alert.textContent = '누적 ' + won(used) + '으로 한도를 ' + won(used - c.goal) + ' 넘었습니다.';
       } else if (pct >= 80) {
         alert.hidden = false; alert.classList.add('warn');
         alert.textContent = '한도의 ' + pct.toFixed(0) + '%를 썼습니다. 남은 여유는 ' + won(gap) + '입니다.';
@@ -485,75 +581,67 @@
           '<td class="c-item"><input data-f="items" value="' + esc(r.items) + '" placeholder="품목"></td>') +
         '<td class="c-amt"><input class="mono amt" data-f="amount" inputmode="numeric" value="' + (Number(r.amount) || 0).toLocaleString('ko-KR') + '"></td>' +
         '<td class="c-del"><button class="del" aria-label="삭제">×</button></td>';
+
       tr.querySelectorAll('input').forEach(inp => {
         inp.addEventListener('change', () => {
           const f = inp.dataset.f;
           r[f] = f === 'amount' ? (parseInt(inp.value.replace(/[^\d]/g, ''), 10) || 0) : inp.value;
-          save(); render();
+          touch(r); save(); render();
         });
       });
       tr.querySelector('.del').addEventListener('click', () => {
-        store[active] = rows().filter(x => x.id !== r.id); save(); render();
+        store._del[r.id] = { at: nowISO(), kind: active };
+        markDirty(r.id);
+        store[active] = rows().filter(x => x.id !== r.id);
+        save(); render();
       });
       tb.appendChild(tr);
     });
 
     if (pendingFocus) {
       const el = tb.querySelector('[data-row="' + pendingFocus.id + '"] [data-f="' + pendingFocus.field + '"]');
-      if (el) {
-        el.focus();
-        if (el.select) el.select();
-        if (el.scrollIntoView) el.scrollIntoView({ block: 'center' });
-      }
+      if (el) { el.focus(); if (el.select) el.select(); if (el.scrollIntoView) el.scrollIntoView({ block: 'center' }); }
       pendingFocus = null;
     }
+    syncStatusIdle();
   }
 
-  // 사진 시각을 일시로 채우고 금액 칸에 커서를 둔다.
   function quickAdd(when, field) {
     const c = cfg();
-    const rec = {
-      id: uid(),
-      date: fmtDT(when ? new Date(when) : new Date()),
-      place: '', items: '', amount: 0
-    };
+    const rec = { id: uid(), date: fmtDT(when ? new Date(when) : new Date()), place: '', items: '', amount: 0, updated_at: nowISO() };
     rows().push(rec);
+    markDirty(rec.id);
     pendingFocus = { id: rec.id, field: field || (c.slim ? 'amount' : 'place') };
     save(); render();
     return rec;
   }
-  function esc(s) { return String(s == null ? '' : s).replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
 
-  /* ---------- image reading ---------- */
+  /* ================= 영수증 읽기 ================= */
   const PROMPT =
     '이 이미지는 한국의 영수증(현금영수증, 카드 매출전표, 택시 영수증 등)이다. 아래 형식의 JSON 배열만 출력하라.\n' +
     '[{"date":"YYYY-MM-DD HH:MM","place":"상호명","items":"주요 품목","amount":정수}]\n' +
-    '규칙: amount는 부가세를 포함한 총 결제/승인 금액을 정수로. 실결제액이 0원이어도 영수증 발행·승인 금액을 사용한다. ' +
-    '쉼표와 원 표시 없이 숫자만. place는 지점명을 포함한 상호이며, 택시 영수증이면 회사명이나 차량번호를 쓴다. ' +
-    'items는 품목이나 승차 구간. 설명, 마크다운, 코드펜스 금지. JSON 배열만.';
+    '규칙: amount는 부가세를 포함한 총 결제/승인 금액을 정수로. 실결제액이 0원이어도 발행·승인 금액을 사용한다. ' +
+    '쉼표와 원 표시 없이 숫자만. 설명, 마크다운, 코드펜스 금지. JSON 배열만.';
 
-  // 사진은 메모리에서만 다룬다. 화면 크기로 줄여 JPEG로 바꾼 뒤, 전송이 끝나면 참조를 끊는다.
   async function toJpeg(file, maxEdge) {
     const draw = (src, w, h) => {
       const scale = Math.min(1, maxEdge / Math.max(w, h));
-      const cw = Math.max(1, Math.round(w * scale)), chh = Math.max(1, Math.round(h * scale));
       const cv = document.createElement('canvas');
-      cv.width = cw; cv.height = chh;
-      cv.getContext('2d').drawImage(src, 0, 0, cw, chh);
+      cv.width = Math.max(1, Math.round(w * scale));
+      cv.height = Math.max(1, Math.round(h * scale));
+      cv.getContext('2d').drawImage(src, 0, 0, cv.width, cv.height);
       const url = cv.toDataURL('image/jpeg', 0.85);
       cv.width = cv.height = 0;
       return url.split(',')[1];
     };
-
     if (window.createImageBitmap) {
       try {
         const bmp = await createImageBitmap(file);
         const data = draw(bmp, bmp.width, bmp.height);
         if (bmp.close) bmp.close();
         return { data: data, media: 'image/jpeg' };
-      } catch (e) { /* 아래 방식으로 재시도 */ }
+      } catch (e) {}
     }
-
     const url = URL.createObjectURL(file);
     try {
       const img = await new Promise((res, rej) => {
@@ -563,9 +651,7 @@
         im.src = url;
       });
       return { data: draw(img, img.naturalWidth, img.naturalHeight), media: 'image/jpeg' };
-    } finally {
-      URL.revokeObjectURL(url);
-    }
+    } finally { URL.revokeObjectURL(url); }
   }
 
   async function readImage(file, target) {
@@ -576,42 +662,35 @@
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: 'claude-sonnet-4-6',
-          max_tokens: 1000,
-          messages: [{
-            role: 'user',
-            content: [
-              { type: 'image', source: { type: 'base64', media_type: shot.media, data: shot.data } },
-              { type: 'text', text: PROMPT }
-            ]
-          }]
+          model: 'claude-sonnet-4-6', max_tokens: 1000,
+          messages: [{ role: 'user', content: [
+            { type: 'image', source: { type: 'base64', media_type: shot.media, data: shot.data } },
+            { type: 'text', text: PROMPT }
+          ] }]
         })
       });
-    } finally {
-      shot = null; // 사진 데이터는 여기서 끝. 어디에도 남기지 않는다.
-    }
-    if (!resp.ok) throw new Error('읽기 요청이 실패했습니다 (' + resp.status + ')');
+    } finally { shot = null; }
+    if (!resp.ok) throw new Error('읽기 요청 실패 (' + resp.status + ')');
     const data = await resp.json();
     const text = (data.content || []).map(c => c.text || '').join('\n');
     const clean = text.replace(/```json|```/g, '').trim();
     const s = clean.indexOf('['), e = clean.lastIndexOf(']');
-    const parsed = JSON.parse(s >= 0 ? clean.slice(s, e + 1) : clean);
-    const arr = Array.isArray(parsed) ? parsed : [parsed];
-
+    const arr0 = JSON.parse(s >= 0 ? clean.slice(s, e + 1) : clean);
+    const arr = Array.isArray(arr0) ? arr0 : [arr0];
     const slim = !!TABS.find(t => t.id === target).slim;
     arr.forEach(x => {
-      store[target].push({
-        id: uid(),
-        date: String(x.date || '').slice(0, 16),
-        place: slim ? '' : (x.place || '확인 필요'),
-        items: slim ? '' : (x.items || ''),
-        amount: parseInt(String(x.amount).replace(/[^\d]/g, ''), 10) || 0
-      });
+      const rec = {
+        id: uid(), date: String(x.date || '').slice(0, 16),
+        place: slim ? '' : (x.place || '확인 필요'), items: slim ? '' : (x.items || ''),
+        amount: parseInt(String(x.amount).replace(/[^\d]/g, ''), 10) || 0,
+        updated_at: nowISO()
+      };
+      store[target].push(rec); markDirty(rec.id);
     });
     return arr.length;
   }
 
-  /* ---------- 2단계: 기기 안에서 읽기 (안드로이드 크롬 내장 인식) ---------- */
+  /* --- 기기 안에서 읽기 --- */
   function toInt(s) { const n = parseInt(String(s).replace(/[^\d]/g, ''), 10); return isNaN(n) ? null : n; }
   function pickMoney(s) {
     const m = String(s).match(/\d[\d,]*/g);
@@ -624,13 +703,9 @@
   function parseReceiptText(text) {
     const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
     const joined = lines.join('\n');
-
-    // 금액: 라벨 우선순위대로 찾고, 없으면 잡음 줄을 뺀 나머지에서 가장 큰 수
     const labels = [
-      { re: /총\s*금액|총액/, w: 5 },
-      { re: /합\s*계/, w: 4 },
-      { re: /승인\s*금액/, w: 3 },
-      { re: /결제\s*금액|받은\s*금액|판매\s*금액/, w: 2 }
+      { re: /총\s*금액|총액/, w: 5 }, { re: /합\s*계/, w: 4 },
+      { re: /승인\s*금액/, w: 3 }, { re: /결제\s*금액|받은\s*금액|판매\s*금액/, w: 2 }
     ];
     let best = null;
     lines.forEach((l, i) => {
@@ -643,33 +718,22 @@
     });
     let amount = best ? best.v : 0;
     if (!amount) {
-      const pool = lines.filter(l => !NOISE.test(l))
-        .map(pickMoney).filter(n => n != null && n > 0);
+      const pool = lines.filter(l => !NOISE.test(l)).map(pickMoney).filter(n => n != null && n > 0);
       amount = pool.length ? Math.max.apply(null, pool) : 0;
     }
-
-    // 일시
     let date = '';
     const d = joined.match(/(20\d{2})\s*[-./년]\s*(\d{1,2})\s*[-./월]\s*(\d{1,2})/);
     if (d) {
       const t = joined.match(/(\d{1,2})\s*:\s*(\d{2})/);
-      date = d[1] + '-' + pad(d[2]) + '-' + pad(d[3]) +
-             (t ? ' ' + pad(Math.min(23, +t[1])) + ':' + t[2] : ' 00:00');
+      date = d[1] + '-' + pad(d[2]) + '-' + pad(d[3]) + (t ? ' ' + pad(Math.min(23, +t[1])) + ':' + t[2] : ' 00:00');
     }
-
-    // 상호
     let place = '';
     const p = joined.match(/(?:상\s*호|가맹점\s*명)\s*[:：]?\s*([^\n]+)/);
     if (p && !/^(정보|내역|명)$/.test(p[1].trim())) place = p[1].trim();
-    else {
-      const c = lines.slice(0, 6).find(l => /점$|㈜|\(주\)|주식회사/.test(l) && !NOISE.test(l) && !/주소/.test(l));
+    if (!place) {
+      const c = lines.find(l => /점$|㈜|\(주\)|주식회사/.test(l) && !NOISE.test(l) && !/주소|정보/.test(l));
       if (c) place = c.trim();
     }
-    if (!place) {
-      const c2 = lines.find(l => /점$|㈜|\(주\)|주식회사/.test(l) && !NOISE.test(l) && !/주소|정보/.test(l));
-      if (c2) place = c2.trim();
-    }
-
     return { date: date, place: place, amount: amount };
   }
 
@@ -679,24 +743,16 @@
     let blocks;
     try { blocks = await new window.TextDetector().detect(bmp); }
     finally { if (bmp.close) bmp.close(); }
-
-    const text = blocks
-      .map(b => ({ y: b.boundingBox.y, x: b.boundingBox.x, t: b.rawValue }))
-      .sort((a, b) => (a.y - b.y) || (a.x - b.x))
-      .map(o => o.t).join('\n');
-
+    const text = blocks.map(b => ({ y: b.boundingBox.y, x: b.boundingBox.x, t: b.rawValue }))
+      .sort((a, b) => (a.y - b.y) || (a.x - b.x)).map(o => o.t).join('\n');
     const r = parseReceiptText(text);
     if (!r.amount) throw new Error('금액을 찾지 못했습니다');
-
     const slim = !!TABS.find(t => t.id === target).slim;
     const rec = {
-      id: uid(),
-      date: r.date || fmtDT(new Date(file.lastModified || Date.now())),
-      place: slim ? '' : (r.place || ''),
-      items: '',
-      amount: r.amount
+      id: uid(), date: r.date || fmtDT(new Date(file.lastModified || Date.now())),
+      place: slim ? '' : (r.place || ''), items: '', amount: r.amount, updated_at: nowISO()
     };
-    store[target].push(rec);
+    store[target].push(rec); markDirty(rec.id);
     return rec;
   }
 
@@ -719,162 +775,100 @@
         const offline = err instanceof TypeError || /Failed to fetch|NetworkError|Load failed/i.test(err.message || '');
         if (!offline) {
           node.className = 'qitem err';
-          node.innerHTML = '<span>✕ ' + esc(f.name) + ' — ' + esc(err.message) + '. 직접 입력으로 추가하세요.</span>';
+          node.innerHTML = '<span>✕ ' + esc(f.name) + ' — ' + esc(err.message) + '</span>';
           continue;
         }
-        autoReadDown = true;
-        $('dropSub').textContent = '기기 안에서 읽습니다 — 인식된 금액은 꼭 확인하세요';
         try {
           const rec = await readOnDevice(f, target);
           node.className = 'qitem';
           node.innerHTML = '<span>✓ 기기에서 읽음 — ' + won(rec.amount) + ' · 확인 후 수정하세요</span>';
-          save();
           pendingFocus = { id: rec.id, field: 'amount' };
-          render();
+          save(); render();
           setTimeout(() => node.remove(), 3200);
         } catch (e2) {
           node.className = 'qitem err';
-          node.innerHTML = '<span>✕ 자동 읽기 불가 — 금액만 입력하세요. 일시는 사진 시각으로 채웠습니다.</span>';
+          node.innerHTML = '<span>✕ 자동 읽기 불가 — 금액만 입력하세요</span>';
           quickAdd(f.lastModified || Date.now(), 'amount');
         }
       }
     }
   }
 
-  /* ---------- events ---------- */
-  /* ---------- 텍스트에서 영수증 읽기 (네트워크 없이 동작) ---------- */
-  const AMT_KEYS = [
-    /총\s*금\s*액|총액|합\s*계\s*금\s*액|승인\s*금액|판매\s*총액/,
-    /합\s*계|요\s*금/,
-    /결제\s*금액|받은\s*금액|받을\s*금액|청구\s*금액/
-  ];
-  const NOT_MONEY = /사업자|승인\s*번호|주문\s*번호|거래\s*번호|가맹점\s*번호|등록\s*번호|카드\s*번호|전화|주소/;
-
-  function numbersIn(line) {
-    const out = [];
-    const re = /(\d[\d,]{1,12})/g;
-    let m;
-    while ((m = re.exec(line))) {
-      const n = parseInt(m[1].replace(/,/g, ''), 10);
-      if (!isNaN(n)) out.push({ n: n, raw: m[1] });
+  /* ================= CSV ================= */
+  function parseCsv(text) {
+    text = text.replace(/^\ufeff/, '');
+    const out = []; let row = [], cell = '', q = false;
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
+      if (q) {
+        if (ch === '"' && text[i + 1] === '"') { cell += '"'; i++; }
+        else if (ch === '"') q = false;
+        else cell += ch;
+      } else if (ch === '"') q = true;
+      else if (ch === ',') { row.push(cell); cell = ''; }
+      else if (ch === '\n') { row.push(cell); out.push(row); row = []; cell = ''; }
+      else if (ch !== '\r') cell += ch;
     }
+    if (cell !== '' || row.length) { row.push(cell); out.push(row); }
+    return out.filter(r => r.some(c => String(c).trim() !== ''));
+  }
+
+  function csvToRecords(text, slim) {
+    const grid = parseCsv(text);
+    if (!grid.length) return [];
+    const head = grid[0].map(h => String(h).trim());
+    const looksHeader = head.some(h => /일시|날짜|장소|상호|품목|금액/.test(h));
+    const idx = { date: 0, place: 1, items: 2, amount: slim ? 1 : 3 };
+    if (looksHeader) head.forEach((h, i) => {
+      if (/일시|날짜|일자/.test(h)) idx.date = i;
+      else if (/장소|상호|가맹점/.test(h)) idx.place = i;
+      else if (/품목|내역|메뉴/.test(h)) idx.items = i;
+      else if (/금액|총액/.test(h)) idx.amount = i;
+    });
+    const out = [];
+    (looksHeader ? grid.slice(1) : grid).forEach(r => {
+      if (/^합계|^총계|^total$/i.test(String(r[0] || '').trim())) return;
+      const amount = parseInt(String(r[idx.amount] == null ? '' : r[idx.amount]).replace(/[^\d]/g, ''), 10);
+      const date = String(r[idx.date] || '').trim();
+      if (!amount && !date) return;
+      out.push({
+        id: uid(), date: date.slice(0, 16),
+        place: slim ? '' : String(r[idx.place] || '').trim(),
+        items: slim ? '' : String(r[idx.items] || '').trim(),
+        amount: amount || 0, updated_at: nowISO()
+      });
+    });
     return out;
   }
 
-  // 쉼표가 있거나 금액다운 자릿수인 값만 후보로 본다. 번호가 적힌 줄은 통째로 무시.
-  function moneyIn(line) {
-    if (!line || NOT_MONEY.test(line)) return [];
-    return numbersIn(line).filter(c => c.raw.indexOf(',') > -1 || (c.n >= 100 && c.n < 10000000));
+  let pendingImport = null;
+  function showImportBar(msg, isErr, withActions) {
+    const bar = $('importBar');
+    bar.hidden = false;
+    bar.classList.toggle('err', !!isErr);
+    $('importMsg').textContent = msg;
+    $('ibAppend').hidden = !withActions;
+    $('ibReplace').hidden = !withActions;
+    $('ibCancel').textContent = withActions ? '취소' : '닫기';
   }
+  function hideImportBar() { pendingImport = null; $('importBar').hidden = true; }
 
-  function pickAmount(lines) {
-    for (const key of AMT_KEYS) {
-      let best = 0;
-      for (let i = 0; i < lines.length; i++) {
-        if (!key.test(lines[i])) continue;
-        let c = moneyIn(lines[i]);
-        if (!c.length && lines[i + 1] && !key.test(lines[i + 1])) c = moneyIn(lines[i + 1]);
-        if (c.length) { const v = c[c.length - 1].n; if (v > best) best = v; }
-      }
-      if (best) return best;
-    }
-    const all = [];
-    lines.forEach(l => {
-      if (/일시|\d{4}-\d{2}-\d{2}/.test(l)) return;
-      moneyIn(l).forEach(c => { if (c.raw.indexOf(',') > -1) all.push(c.n); });
-    });
-    return all.length ? Math.max.apply(null, all) : 0;
-  }
-
-  function pickDate(text) {
-    let y, mo, d, hh = 12, mm = 0;
-    let m = text.match(/(20\d{2})\s*[-.\/년]\s*(\d{1,2})\s*[-.\/월]\s*(\d{1,2})/);
-    if (m) { y = +m[1]; mo = +m[2]; d = +m[3]; }
-    else {
-      m = text.match(/(\d{1,2})\s*[-.\/월]\s*(\d{1,2})\s*일?/);
-      if (m) { const n = new Date(); y = n.getFullYear(); mo = +m[1]; d = +m[2]; }
-    }
-    const t = text.match(/(\d{1,2})\s*:\s*(\d{2})/);
-    if (t) { hh = +t[1]; mm = +t[2]; }
-    if (!y || !mo || !d || mo > 12 || d > 31) return fmtDT(new Date());
-    return fmtDT(new Date(y, mo - 1, d, hh, mm));
-  }
-
-  function pickPlace(lines) {
-    const m = lines.find(l => /상\s*호/.test(l));
-    if (m) {
-      const v = m.replace(/.*상\s*호\s*[:：]?\s*/, '').trim();
-      if (v) return v;
-    }
-    const cand = lines.find(l => l.length >= 2 && l.length <= 30 &&
-      !/\d{3,}/.test(l) && !/사업자|승인|주문|전화|주소|합계|금액|부가세|일시|영수증/.test(l));
-    return cand ? cand.trim() : '';
-  }
-
-  function parseReceiptText(text, slim) {
-    const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-    if (!lines.length) return null;
-    const amount = pickAmount(lines);
-    return {
-      id: uid(),
-      date: pickDate(text),
-      place: slim ? '' : pickPlace(lines),
-      items: '',
-      amount: amount
-    };
-  }
-
-  $('pasteBtn').addEventListener('click', () => {
-    const p = $('pastePanel');
-    p.hidden = !p.hidden;
-    if (!p.hidden) $('pasteText').focus();
-  });
-  $('pasteClose').addEventListener('click', () => { $('pastePanel').hidden = true; $('pasteText').value = ''; });
-
-  $('pasteFromClip').addEventListener('click', async () => {
-    try {
-      const t = await navigator.clipboard.readText();
-      if (t) $('pasteText').value = t;
-      else $('pasteText').placeholder = '클립보드가 비어 있습니다';
-    } catch (e) {
-      $('pasteText').placeholder = '클립보드를 읽지 못했습니다. 길게 눌러 붙여넣기 하세요';
-      $('pasteText').focus();
-    }
-  });
-
-  $('pasteRead').addEventListener('click', () => {
-    const text = $('pasteText').value;
-    const rec = parseReceiptText(text, !!cfg().slim);
-    if (!rec) { $('pasteText').placeholder = '읽을 내용이 없습니다'; return; }
-    rows().push(rec);
-    pendingFocus = { id: rec.id, field: 'amount' };
-    $('pasteText').value = '';
-    $('pastePanel').hidden = true;
-    save(); render();
-  });
-
+  /* ================= 이벤트 ================= */
   $('pick').addEventListener('click', () => $('file').click());
   $('file').addEventListener('change', e => { handleFiles(e.target.files); e.target.value = ''; });
 
-  /* ---------- 페이지 안에서 바로 촬영 (파일 대화상자 없이) ---------- */
   let stream = null;
-
   function closeCam() {
     if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
-    const v = $('cam');
-    v.pause(); v.srcObject = null;
+    const v = $('cam'); v.pause(); v.srcObject = null;
     $('camPanel').hidden = true;
   }
-
   async function openCam() {
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { $('camFile').click(); return; }
     try {
-      stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 } }, audio: false
-      });
+      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 } }, audio: false });
       const v = $('cam');
-      v.srcObject = stream;
-      v.setAttribute('playsinline', '');
+      v.srcObject = stream; v.setAttribute('playsinline', '');
       $('camPanel').hidden = false;
       await v.play();
       $('camPanel').scrollIntoView({ block: 'center' });
@@ -882,14 +876,12 @@
       closeCam();
       const node = document.createElement('div');
       node.className = 'qitem err';
-      node.innerHTML = '<span>✕ 이 화면에서는 카메라를 열 수 없습니다 (' + esc(e.name || 'blocked') +
-                       '). 크롬에서 열거나 직접 입력을 쓰세요.</span>';
+      node.innerHTML = '<span>✕ 카메라를 열 수 없습니다 (' + esc(e.name || 'blocked') + ')</span>';
       $('queue').appendChild(node);
       setTimeout(() => node.remove(), 6000);
-      $('camFile').click(); // 파일 선택이 열리는 환경이면 그쪽으로
+      $('camFile').click();
     }
   }
-
   async function shoot() {
     const v = $('cam');
     if (!v.videoWidth) return;
@@ -903,100 +895,21 @@
     closeCam();
     if (blob) handleFiles([new File([blob], 'scan.jpg', { type: 'image/jpeg', lastModified: Date.now() })]);
   }
-
   $('scan').addEventListener('click', openCam);
   $('shoot').addEventListener('click', shoot);
   $('camClose').addEventListener('click', closeCam);
   $('camFile').addEventListener('change', e => { handleFiles(e.target.files); e.target.value = ''; });
 
-  // 붙여넣기로도 받는다
-  document.addEventListener('paste', e => {
-    const items = (e.clipboardData && e.clipboardData.files) || [];
-    if (items.length) handleFiles(items);
-  });
-
-  const hasCam = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
-  if (hasCam || (window.matchMedia && window.matchMedia('(pointer: coarse)').matches)) {
-    $('scan').hidden = false;
-    $('pick').classList.add('ghost');
-    $('pick').textContent = '사진첩에서 고르기';
-    $('dropTitle').textContent = '영수증을 찍으면 바로 읽어서 넣습니다';
-  }
-  $('diag').textContent =
-    '카메라 ' + (hasCam ? '○' : '×') +
-    ' · 기기인식 ' + ('TextDetector' in window ? '○' : '×') +
-    ' · ' + MODE_TEXT[storeMode];
-
   const drop = $('drop');
   ['dragenter', 'dragover'].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.add('over'); }));
   ['dragleave', 'drop'].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.remove('over'); }));
   drop.addEventListener('drop', e => { if (e.dataTransfer.files) handleFiles(e.dataTransfer.files); });
+  document.addEventListener('paste', e => {
+    const f = (e.clipboardData && e.clipboardData.files) || [];
+    if (f.length) handleFiles(f);
+  });
 
   $('addRow').addEventListener('click', () => { quickAdd(null, null); });
-
-  /* ---------- CSV 불러오기 ---------- */
-  function parseCsv(text) {
-    text = text.replace(/^\ufeff/, '');
-    const rowsOut = []; let row = [], cell = '', q = false;
-    for (let i = 0; i < text.length; i++) {
-      const ch = text[i];
-      if (q) {
-        if (ch === '"' && text[i + 1] === '"') { cell += '"'; i++; }
-        else if (ch === '"') q = false;
-        else cell += ch;
-      } else if (ch === '"') q = true;
-      else if (ch === ',') { row.push(cell); cell = ''; }
-      else if (ch === '\n') { row.push(cell); rowsOut.push(row); row = []; cell = ''; }
-      else if (ch !== '\r') cell += ch;
-    }
-    if (cell !== '' || row.length) { row.push(cell); rowsOut.push(row); }
-    return rowsOut.filter(r => r.some(c => String(c).trim() !== ''));
-  }
-
-  function csvToRecords(text, slim) {
-    const grid = parseCsv(text);
-    if (!grid.length) return [];
-    const head = grid[0].map(h => String(h).trim());
-    const looksHeader = head.some(h => /일시|날짜|장소|상호|품목|금액/.test(h));
-    const idx = { date: 0, place: 1, items: 2, amount: slim ? 1 : 3 };
-    if (looksHeader) {
-      head.forEach((h, i) => {
-        if (/일시|날짜|일자/.test(h)) idx.date = i;
-        else if (/장소|상호|가맹점/.test(h)) idx.place = i;
-        else if (/품목|내역|메뉴/.test(h)) idx.items = i;
-        else if (/금액|합계금액|총액/.test(h)) idx.amount = i;
-      });
-    }
-    const body = looksHeader ? grid.slice(1) : grid;
-    const out = [];
-    body.forEach(r => {
-      const first = String(r[0] || '').trim();
-      if (/^합계|^총계|^total$/i.test(first)) return;
-      const amount = parseInt(String(r[idx.amount] == null ? '' : r[idx.amount]).replace(/[^\d]/g, ''), 10);
-      const date = String(r[idx.date] || '').trim();
-      if (!amount && !date) return;
-      out.push({
-        id: uid(),
-        date: date.slice(0, 16),
-        place: slim ? '' : String(r[idx.place] || '').trim(),
-        items: slim ? '' : String(r[idx.items] || '').trim(),
-        amount: amount || 0
-      });
-    });
-    return out;
-  }
-
-  let pending = null;
-  function showImportBar(msg, isErr, withActions) {
-    const bar = $('importBar');
-    bar.hidden = false;
-    bar.classList.toggle('err', !!isErr);
-    $('importMsg').textContent = msg;
-    $('ibAppend').hidden = !withActions;
-    $('ibReplace').hidden = !withActions;
-    $('ibCancel').textContent = withActions ? '취소' : '닫기';
-  }
-  function hideImportBar() { pending = null; $('importBar').hidden = true; }
 
   $('csvIn').addEventListener('click', () => $('csvFile').click());
   $('csvFile').addEventListener('change', e => {
@@ -1008,26 +921,25 @@
     fr.onload = () => {
       try {
         const recs = csvToRecords(String(fr.result), !!c.slim);
-        if (!recs.length) { showImportBar('불러올 행을 찾지 못했습니다. 일시와 금액 열이 있는 CSV인지 확인하세요.', true, false); return; }
-        pending = { target: c.id, recs: recs };
-        const total = recs.reduce((s, r) => s + r.amount, 0);
-        showImportBar(f.name + ' — ' + recs.length + '건, ' + won(total) + '을 ' + c.label + '에 불러옵니다.', false, true);
-      } catch (err) {
-        showImportBar('CSV를 읽지 못했습니다: ' + err.message, true, false);
-      }
+        if (!recs.length) { showImportBar('불러올 행을 찾지 못했습니다.', true, false); return; }
+        pendingImport = { target: c.id, recs: recs };
+        showImportBar(f.name + ' — ' + recs.length + '건, ' + won(recs.reduce((s, r) => s + r.amount, 0)) + '을 ' + c.label + '에 불러옵니다.', false, true);
+      } catch (err) { showImportBar('CSV를 읽지 못했습니다: ' + err.message, true, false); }
     };
     fr.onerror = () => showImportBar('파일을 읽지 못했습니다.', true, false);
     fr.readAsText(f, 'utf-8');
   });
 
   $('ibAppend').addEventListener('click', () => {
-    if (!pending) return hideImportBar();
-    store[pending.target] = store[pending.target].concat(pending.recs);
+    if (!pendingImport) return hideImportBar();
+    pendingImport.recs.forEach(r => { store[pendingImport.target].push(r); markDirty(r.id); });
     hideImportBar(); save(); render();
   });
   $('ibReplace').addEventListener('click', () => {
-    if (!pending) return hideImportBar();
-    store[pending.target] = pending.recs.slice();
+    if (!pendingImport) return hideImportBar();
+    store[pendingImport.target].forEach(r => { store._del[r.id] = { at: nowISO(), kind: pendingImport.target }; markDirty(r.id); });
+    store[pendingImport.target] = [];
+    pendingImport.recs.forEach(r => { store[pendingImport.target].push(r); markDirty(r.id); });
     hideImportBar(); save(); render();
   });
   $('ibCancel').addEventListener('click', hideImportBar);
@@ -1037,8 +949,7 @@
     const head = (c.slim ? '일시,금액' : '일시,장소,품목,금액') + '\n';
     const body = rows().map(r => c.slim
       ? ['"' + r.date + '"', r.amount].join(',')
-      : ['"' + r.date + '"', '"' + (r.place || '') + '"', '"' + (r.items || '') + '"', r.amount].join(',')
-    ).join('\n');
+      : ['"' + r.date + '"', '"' + (r.place || '') + '"', '"' + (r.items || '') + '"', r.amount].join(',')).join('\n');
     const total = (c.slim ? '\n"합계",' : '\n"합계","","",') + sum(active);
     const blob = new Blob(['\ufeff' + head + body + total], { type: 'text/csv;charset=utf-8' });
     const a = document.createElement('a');
@@ -1050,9 +961,58 @@
 
   $('reset').addEventListener('click', () => {
     if (!confirm(cfg().label + ' 내역을 모두 지웁니다. 계속할까요?')) return;
-    store[active] = []; save(); render();
+    rows().forEach(r => { store._del[r.id] = { at: nowISO(), kind: active }; markDirty(r.id); });
+    store[active] = [];
+    save(); render();
   });
 
-  load().then(render);
+  /* --- 동기화 키 --- */
+  $('syncBtn').addEventListener('click', () => {
+    const p = $('syncPanel');
+    p.hidden = !p.hidden;
+    if (!p.hidden) { $('vaultInput').value = vault || ''; $('vaultInput').focus(); }
+  });
+  $('vaultNew').addEventListener('click', () => {
+    const rnd = (window.crypto && crypto.randomUUID) ? crypto.randomUUID().replace(/-/g, '')
+      : Array.from({ length: 32 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
+    $('vaultInput').value = 'v-' + rnd;
+    $('vaultNote').textContent = '새 키를 만들었습니다. 연결을 누른 뒤 복사해서 다른 기기에 넣으세요.';
+  });
+  $('vaultCopy').addEventListener('click', async () => {
+    const v = $('vaultInput').value.trim();
+    if (!v) return;
+    try { await navigator.clipboard.writeText(v); $('vaultNote').textContent = '키를 복사했습니다.'; }
+    catch (e) { $('vaultInput').select(); $('vaultNote').textContent = '복사가 막혔습니다. 직접 선택해 복사하세요.'; }
+  });
+  $('vaultSave').addEventListener('click', async () => {
+    const v = $('vaultInput').value.trim();
+    if (v.length < 16) { $('vaultNote').textContent = '키는 16자 이상이어야 합니다. "새 키 만들기"를 쓰세요.'; return; }
+    await saveVault(v);
+    $('vaultNote').textContent = '연결했습니다. 다른 기기에도 같은 키를 넣으면 내역이 함께 갑니다.';
+    TABS.forEach(t => store[t.id].forEach(r => markDirty(r.id)));
+    await saveLocal();
+    await syncNow();
+  });
+  $('vaultOff').addEventListener('click', async () => {
+    await saveVault(null);
+    $('vaultNote').textContent = '연결을 해제했습니다. 이 기기에만 저장됩니다.';
+    syncStatusIdle();
+  });
+
+  window.addEventListener('online', syncNow);
+  window.addEventListener('offline', syncStatusIdle);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') syncNow(); });
+  setInterval(() => { if (document.visibilityState === 'visible') syncNow(); }, 30000);
+
+  const hasCam = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+  if (hasCam || (window.matchMedia && window.matchMedia('(pointer: coarse)').matches)) {
+    $('scan').hidden = false;
+    $('pick').classList.add('ghost');
+    $('pick').textContent = '사진첩에서 고르기';
+    $('dropTitle').textContent = '영수증을 찍으면 바로 읽어서 넣습니다';
+  }
+  $('diag').textContent = '카메라 ' + (hasCam ? '○' : '×') + ' · 기기인식 ' + ('TextDetector' in window ? '○' : '×');
+
+  loadLocal().then(() => { render(); return syncNow(); });
 })();
 </script>
