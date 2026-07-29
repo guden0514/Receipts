@@ -63,6 +63,10 @@
         <button class="btn" id="scan" hidden>카메라로 스캔</button>
         <button class="btn" id="pick">이미지 고르기</button>
       </div>
+      <p class="ocr-row" id="ocrRow" hidden>
+        <button class="btn ghost" id="ocrOn">정밀 인식 켜기</button>
+        <span class="ocr-note">이 브라우저는 글자 인식 기능이 없어, 처음 한 번 약 15MB를 내려받습니다. 이후에는 저장돼 바로 동작합니다.</span>
+      </p>
       <div class="cam-panel" id="camPanel" hidden>
         <video id="cam" playsinline muted></video>
         <div class="cam-actions">
@@ -239,6 +243,8 @@
   .cam-actions { display: flex; gap: 8px; margin-top: 8px; }
   .cam-actions .btn { flex: 1; padding: 12px; font-size: 14px; }
   .privacy { margin: 12px 0 0; font-size: 11px; color: var(--muted); }
+  .ocr-row { margin: 12px 0 0; display: flex; flex-direction: column; gap: 6px; align-items: center; }
+  .ocr-note { font-size: 11px; color: var(--muted); line-height: 1.45; }
 
   .btn { font-family: var(--sans); font-size: 13px; cursor: pointer; border-radius: 3px; padding: 7px 14px; border: 1px solid var(--ink); background: var(--ink); color: var(--paper); transition: opacity .15s; }
   .btn:hover { opacity: .82; }
@@ -884,6 +890,76 @@
     return rec;
   }
 
+  /* --- 내장 인식이 없는 브라우저용: 인식 엔진을 직접 받아서 쓴다 --- */
+  const OCRKEY = 'receipts:ocr';
+  let ocrOn = false;
+  try { ocrOn = LS && LS.getItem(OCRKEY) === 'on'; } catch (e) {}
+  let tessWorker = null, tessLoading = null;
+
+  async function loadTesseract(onStatus) {
+    if (tessWorker) return tessWorker;
+    if (tessLoading) return tessLoading;
+    tessLoading = (async () => {
+      if (!window.Tesseract) {
+        onStatus && onStatus('인식 엔진 내려받는 중…');
+        await new Promise((res, rej) => {
+          const s = document.createElement('script');
+          s.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
+          s.onload = res;
+          s.onerror = () => rej(new Error('인식 엔진을 내려받지 못했습니다'));
+          document.head.appendChild(s);
+        });
+      }
+      onStatus && onStatus('한국어 인식 자료 준비 중…');
+      tessWorker = await window.Tesseract.createWorker('kor+eng', 1, {
+        logger: m => {
+          if (!onStatus) return;
+          const pct = m.progress ? ' ' + Math.round(m.progress * 100) + '%' : '';
+          if (m.status && /load|initial|download/i.test(m.status)) onStatus('인식 자료 준비 중…' + pct);
+        }
+      });
+      return tessWorker;
+    })();
+    try { return await tessLoading; }
+    catch (e) { tessLoading = null; throw e; }
+  }
+
+  function tessToLines(data) {
+    let words = [];
+    if (data.words && data.words.length) words = data.words;
+    else if (data.blocks) {
+      data.blocks.forEach(b => (b.paragraphs || []).forEach(p => (p.lines || []).forEach(l => (l.words || []).forEach(w => words.push(w)))));
+    }
+    if (words.length) {
+      return blocksToLines(words.filter(w => w.text && w.text.trim()).map(w => ({
+        rawValue: w.text,
+        boundingBox: { x: w.bbox.x0, y: w.bbox.y0, height: Math.max(1, w.bbox.y1 - w.bbox.y0) }
+      })));
+    }
+    return String(data.text || '').split('\n').map(t => t.trim()).filter(Boolean)
+      .map((t, i) => ({ t: t, h: 1, y: i }));
+  }
+
+  async function readWithEngine(file, target, onStatus) {
+    const w = await loadTesseract(onStatus);
+    onStatus && onStatus('영수증 읽는 중…');
+    const out = await w.recognize(file, {}, { text: true, blocks: true });
+    const lines = tessToLines(out.data || {});
+    if (!lines.length) throw new Error('글자를 인식하지 못했습니다');
+
+    const r = parseReceiptText(lines);
+    const slim = !!TABS.find(t => t.id === target).slim;
+    const rec = {
+      id: uid(),
+      date: r.date || fmtDT(new Date(file.lastModified || Date.now())),
+      place: slim ? '' : (r.place || ''),
+      items: '', amount: r.amount || 0, updated_at: nowISO()
+    };
+    rec._readDate = !!r.date;
+    store[target].push(rec); markDirty(rec.id);
+    return rec;
+  }
+
   async function handleFiles(files) {
     const target = active;
     const label = TABS.find(t => t.id === target).label;
@@ -906,8 +982,11 @@
           node.innerHTML = '<span>✕ ' + esc(f.name) + ' — ' + esc(err.message) + '</span>';
           continue;
         }
+        const setMsg = txt => { node.innerHTML = '<span class="spin"></span><span>' + esc(txt) + '</span>'; };
+        const canBuiltIn = ('TextDetector' in window) && window.createImageBitmap;
         try {
-          const rec = await readOnDevice(f, target);
+          if (!canBuiltIn && !ocrOn) throw new Error('이 브라우저는 글자 인식 기능이 없습니다. 정밀 인식을 켜세요');
+          const rec = canBuiltIn ? await readOnDevice(f, target) : await readWithEngine(f, target, setMsg);
           const okAmt = !!rec.amount, okDate = !!rec._readDate;
           node.className = okAmt ? 'qitem' : 'qitem err';
           node.innerHTML = '<span>' + (okAmt ? '✓' : '△') + ' ' +
@@ -921,6 +1000,7 @@
           node.className = 'qitem err';
           node.innerHTML = '<span>✕ ' + esc(e2.message) + ' — 금액을 직접 입력하세요</span>';
           quickAdd(f.lastModified || Date.now(), 'amount');
+          refreshOcrRow();
         }
       }
     }
@@ -1136,6 +1216,30 @@
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') syncNow(); });
   setInterval(() => { if (document.visibilityState === 'visible') syncNow(); }, 30000);
 
+  function refreshOcrRow() {
+    const builtIn = ('TextDetector' in window) && window.createImageBitmap;
+    $('ocrRow').hidden = builtIn;
+    if (builtIn) return;
+    $('ocrOn').textContent = ocrOn ? '인식 자료 미리 받기' : '정밀 인식 켜기';
+    $('ocrOn').classList.toggle('ghost', ocrOn);
+  }
+
+  $('ocrOn').addEventListener('click', async () => {
+    const note = $('ocrRow').querySelector('.ocr-note');
+    const say = t => { note.textContent = t; };
+    ocrOn = true;
+    try { if (LS) LS.setItem(OCRKEY, 'on'); } catch (e) {}
+    $('ocrOn').disabled = true;
+    try {
+      await loadTesseract(say);
+      say('준비됐습니다. 이제 촬영하면 영수증을 읽습니다.');
+    } catch (e) {
+      say(e.message + ' 통신 상태를 확인하고 다시 눌러 주세요.');
+    }
+    $('ocrOn').disabled = false;
+    refreshOcrRow();
+  });
+
   const hasCam = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
   if (hasCam || (window.matchMedia && window.matchMedia('(pointer: coarse)').matches)) {
     $('scan').hidden = false;
@@ -1143,7 +1247,9 @@
     $('pick').textContent = '사진첩에서 고르기';
     $('dropTitle').textContent = '영수증을 찍으면 바로 읽어서 넣습니다';
   }
-  $('diag').textContent = '카메라 ' + (hasCam ? '○' : '×') + ' · 기기인식 ' + ('TextDetector' in window ? '○' : '×');
+  $('diag').textContent = '카메라 ' + (hasCam ? '○' : '×') +
+    ' · 인식 ' + (('TextDetector' in window) ? '내장' : (ocrOn ? '정밀' : '없음'));
+  refreshOcrRow();
 
   loadLocal().then(() => { render(); return syncNow(); });
 })();
