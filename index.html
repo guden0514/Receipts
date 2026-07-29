@@ -1,100 +1,126 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>영수증 트래커</title>
+<title>영수증 증빙</title>
 
 <div id="app">
-  <div class="roll">
-    <div class="tear top"></div>
+  <div class="shell">
 
-    <nav class="tabs" id="tabs" role="tablist"></nav>
-
-    <div class="syncbar">
-      <span class="sync-state" id="syncState">동기화 꺼짐</span>
-      <button class="linkbtn" id="syncBtn">기기 연결</button>
-    </div>
-
-    <div class="sync-panel" id="syncPanel" hidden>
-      <p class="sp-note">두 기기에 같은 키를 넣으면 내역이 함께 갑니다. 폰에서 키를 만들고, 데스크톱에 같은 키를 붙여넣으세요.</p>
-      <input id="vaultInput" placeholder="동기화 키" autocomplete="off" spellcheck="false">
-      <div class="sp-actions">
-        <button class="btn" id="vaultSave">연결</button>
-        <button class="btn ghost" id="vaultNew">새 키 만들기</button>
-        <button class="btn ghost" id="vaultCopy">복사</button>
-        <button class="btn ghost danger" id="vaultOff">해제</button>
+    <header class="appbar">
+      <div class="appbar-main">
+        <h1>영수증 증빙</h1>
+        <span class="rule"></span>
+        <span class="deadline">마감 2026-09-14</span>
       </div>
-      <p class="sp-note" id="vaultNote">키는 이 기기에만 저장됩니다. 잃어버리면 서버의 내역을 다시 볼 수 없으니 어딘가 적어 두세요.</p>
-    </div>
-
-    <header class="head">
-      <div class="brand">
-        <span class="dot" id="dot"></span>
-        <span id="brandLabel">—</span>
+      <div class="appbar-side">
+        <span class="chip" id="stamp">D-—</span>
+        <span class="sync-state" id="syncState">동기화 꺼짐</span>
+        <button class="btn quiet" id="syncBtn">기기 연결</button>
       </div>
-      <h1 id="bigNum">—</h1>
-      <p class="sub" id="bigSub">—</p>
-      <div class="stamp" id="stamp">D-—</div>
     </header>
 
-    <section class="gauge-wrap">
-      <div class="gauge"><div class="gauge-fill" id="gaugeFill"></div></div>
-      <div class="gauge-labels">
-        <span id="gaugeNow">0원</span>
-        <span id="gaugePct">0%</span>
-        <span id="gaugeGoal">0원</span>
+    <section class="panel" id="syncPanel" hidden>
+      <p class="panel-note">두 기기에 같은 키를 넣으면 내역이 함께 갑니다. 폰에서 키를 만들고 데스크톱에 붙여넣으세요.</p>
+      <div class="field">
+        <label for="vaultInput">동기화 키</label>
+        <input id="vaultInput" placeholder="v-xxxxxxxx" autocomplete="off" spellcheck="false">
       </div>
+      <div class="panel-actions">
+        <button class="btn primary" id="vaultSave">연결</button>
+        <button class="btn" id="vaultNew">키 만들기</button>
+        <button class="btn" id="vaultCopy">키 복사</button>
+        <button class="btn danger" id="vaultOff">연결 해제</button>
+      </div>
+      <p class="panel-note" id="vaultNote">키는 이 기기에만 저장됩니다. 잃어버리면 서버에 올린 내역을 다시 볼 수 없으니 따로 적어 두세요.</p>
     </section>
 
-    <section class="stats">
-      <div class="stat"><span class="k" id="k1">사용 금액</span><span class="v" id="v1">—</span></div>
-      <div class="stat"><span class="k">남은 일수</span><span class="v" id="v2">—</span></div>
-      <div class="stat"><span class="k" id="k3">하루 평균</span><span class="v" id="v3">—</span></div>
-      <div class="stat"><span class="k" id="k4">주당</span><span class="v" id="v4">—</span></div>
+    <nav class="segmented" id="tabs" role="tablist"></nav>
+
+    <section class="card summary">
+      <div class="summary-top">
+        <div class="summary-figure">
+          <p class="eyebrow"><span class="statusdot" id="dot"></span><span id="brandLabel">—</span></p>
+          <p class="figure" id="bigNum">—</p>
+          <p class="figure-sub" id="bigSub">—</p>
+        </div>
+        <dl class="facts">
+          <div><dt>목표</dt><dd id="gaugeGoal">—</dd></div>
+          <div><dt>달성률</dt><dd id="gaugePct">—</dd></div>
+        </dl>
+      </div>
+
+      <div class="bar">
+        <div class="bar-track">
+          <div class="bar-fill" id="gaugeFill"></div>
+          <span class="bar-tick" id="paceTick" hidden></span>
+        </div>
+        <div class="bar-legend">
+          <span id="gaugeNow">0원</span>
+          <span id="paceNote"></span>
+        </div>
+      </div>
+
+      <dl class="metrics">
+        <div><dt id="k1">채운 금액</dt><dd id="v1">—</dd></div>
+        <div><dt>남은 일수</dt><dd id="v2">—</dd></div>
+        <div><dt id="k3">하루 평균</dt><dd id="v3">—</dd></div>
+        <div><dt id="k4">주당</dt><dd id="v4">—</dd></div>
+      </dl>
     </section>
 
-    <p class="alert" id="memWarn" hidden>이 화면에서는 내역이 저장되지 않습니다. 닫기 전에 CSV로 저장해 두세요.</p>
-    <p class="alert" id="alert" hidden></p>
+    <p class="banner critical" id="memWarn" hidden>이 화면에서는 내역이 저장되지 않습니다. 닫기 전에 CSV로 내보내세요.</p>
+    <p class="banner" id="alert" hidden></p>
 
-    <section class="drop" id="drop">
+    <section class="card capture" id="drop">
       <input type="file" id="file" accept="image/*" multiple hidden>
       <input type="file" id="camFile" accept="image/*" capture="environment" hidden>
-      <p class="drop-title" id="dropTitle">영수증 이미지를 여기에 놓으면 자동으로 읽습니다</p>
-      <p class="drop-sub" id="dropSub">—</p>
-      <div class="drop-actions">
-        <button class="btn" id="scan" hidden>카메라로 스캔</button>
-        <button class="btn" id="pick">이미지 고르기</button>
+
+      <div class="capture-head">
+        <div>
+          <p class="capture-title" id="dropTitle">영수증 이미지를 여기에 놓으면 읽습니다</p>
+          <p class="capture-sub" id="dropSub">—</p>
+        </div>
+        <div class="capture-actions">
+          <button class="btn primary" id="scan" hidden>영수증 촬영</button>
+          <button class="btn" id="pick">이미지 선택</button>
+        </div>
       </div>
+
       <p class="ocr-row" id="ocrRow" hidden>
-        <button class="btn ghost" id="ocrOn">정밀 인식 켜기</button>
-        <span class="ocr-note">이 브라우저는 글자 인식 기능이 없어, 처음 한 번 약 15MB를 내려받습니다. 이후에는 저장돼 바로 동작합니다.</span>
+        <button class="btn" id="ocrOn">정밀 인식 켜기</button>
+        <span class="ocr-note">이 브라우저에는 글자 인식 기능이 없습니다. 처음 한 번 약 15MB를 내려받으면 이후에는 바로 동작합니다.</span>
       </p>
+
       <div class="cam-panel" id="camPanel" hidden>
         <video id="cam" playsinline muted></video>
         <div class="cam-actions">
-          <button class="btn" id="shoot">촬영</button>
-          <button class="btn ghost" id="camClose">닫기</button>
+          <button class="btn primary" id="shoot">촬영</button>
+          <button class="btn" id="camClose">닫기</button>
         </div>
       </div>
-      <p class="privacy">사진은 저장하지 않습니다. 읽고 나면 바로 버리고 일시·금액만 남습니다.</p>
+
       <div id="queue" class="queue"></div>
+
       <div class="dump" id="dumpBox" hidden>
         <div class="dump-head">
           <span>읽은 내용</span>
           <span class="dump-btns">
-            <button class="btn ghost" id="dumpCopy">복사</button>
-            <button class="btn ghost" id="dumpClose">닫기</button>
+            <button class="btn quiet" id="dumpCopy">복사</button>
+            <button class="btn quiet" id="dumpClose">닫기</button>
           </span>
         </div>
         <pre id="dumpText"></pre>
       </div>
+
+      <p class="privacy">사진은 저장하지 않습니다. 읽은 뒤 바로 버리고 일시와 금액만 남깁니다.</p>
     </section>
 
-    <section class="ledger">
-      <div class="ledger-head">
-        <span>내역 <em id="count">0</em>건</span>
-        <div class="tools">
-          <button class="btn ghost" id="addRow">직접 입력</button>
-          <button class="btn ghost" id="csvIn">CSV 불러오기</button>
-          <button class="btn ghost" id="csv">CSV 저장</button>
+    <section class="card ledger">
+      <div class="toolbar">
+        <span class="toolbar-title">내역 <em id="count">0</em>건</span>
+        <div class="toolbar-actions">
+          <button class="btn" id="addRow">직접 추가</button>
+          <button class="btn" id="csvIn">CSV 가져오기</button>
+          <button class="btn" id="csv">CSV 내보내기</button>
           <input type="file" id="csvFile" accept=".csv,text/csv" hidden>
         </div>
       </div>
@@ -102,49 +128,65 @@
       <div class="import-bar" id="importBar" hidden>
         <span id="importMsg"></span>
         <span class="ib-actions">
-          <button class="btn ghost" id="ibAppend">기존에 추가</button>
-          <button class="btn ghost" id="ibReplace">기존 내역 교체</button>
-          <button class="btn ghost" id="ibCancel">취소</button>
+          <button class="btn primary" id="ibAppend">기존에 추가</button>
+          <button class="btn" id="ibReplace">기존 내역 교체</button>
+          <button class="btn quiet" id="ibCancel">취소</button>
         </span>
       </div>
 
-      <table id="table">
-        <thead id="thead"></thead>
-        <tbody id="tbody"></tbody>
-        <tfoot>
-          <tr><td id="totalLabel" colspan="3">합계</td><td class="c-amt" id="total">0</td><td></td></tr>
-        </tfoot>
-      </table>
-      <p class="empty" id="empty" hidden>아직 등록된 영수증이 없습니다. 이미지를 올리거나 직접 입력하세요.</p>
+      <div class="tablewrap">
+        <table id="table">
+          <thead id="thead"></thead>
+          <tbody id="tbody"></tbody>
+          <tfoot>
+            <tr><td id="totalLabel" colspan="3">합계</td><td class="c-amt" id="total">0</td><td></td></tr>
+          </tfoot>
+        </table>
+      </div>
+      <p class="empty" id="empty" hidden>등록된 영수증이 없습니다. 위에서 촬영하거나 직접 추가하세요.</p>
     </section>
 
-    <footer class="foot">
-      <span id="saveState">저장됨</span>
-      <span id="diag"></span>
-      <button class="btn ghost danger" id="reset">이 탭 지우기</button>
+    <footer class="statusbar">
+      <span class="status-left">
+        <span id="saveState">저장됨</span>
+        <span class="rule"></span>
+        <span id="diag"></span>
+      </span>
+      <button class="btn danger quiet" id="reset">이 탭 내역 지우기</button>
     </footer>
 
-    <div class="tear bottom"></div>
   </div>
 </div>
 
 <style>
+  @import url("https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.css");
+
   #app {
-    --paper: #f1efe7;
-    --paper-2: #e7e4da;
-    --ink: #171713;
-    --muted: #85826f;
-    --rule: #cbc7b8;
-    --stamp: #b03a2e;
-    --fill: #3f6b4f;
-    --warn: #a8762a;
-    --mono: ui-monospace, "SF Mono", "Roboto Mono", Menlo, Consolas, monospace;
-    --sans: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Pretendard",
-            "Malgun Gothic", "Noto Sans KR", sans-serif;
-    font-family: var(--sans);
+    --blue: #3182f6;
+    --blue-strong: #1b64da;
+    --blue-tint: #e8f3ff;
+    --bg: #f2f4f6;
+    --surface: #ffffff;
+    --soft: #f7f8fa;
+    --ink: #191f28;
+    --ink-2: #4e5968;
+    --muted: #8b95a1;
+    --faint: #b0b8c1;
+    --line: #eaedf0;
+    --positive: #00b27a;
+    --warning: #ff9200;
+    --critical: #f04452;
+
+    --sans: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont,
+            "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", system-ui, sans-serif;
+
+    background: var(--bg);
     color: var(--ink);
+    font-family: var(--sans);
+    font-size: 14px;
     line-height: 1.5;
-    padding: 8px 0 24px;
+    letter-spacing: -.01em;
+    padding: 16px 0 40px;
     -webkit-font-smoothing: antialiased;
     -webkit-text-size-adjust: 100%;
     text-size-adjust: 100%;
@@ -152,184 +194,231 @@
     overflow-wrap: anywhere;
   }
   #app * { box-sizing: border-box; }
+  #app :focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; border-radius: 8px; }
 
-  .roll {
-    max-width: 720px; margin: 0 auto; background: var(--paper); position: relative;
-    box-shadow: 0 1px 0 rgba(0,0,0,.06), 0 18px 40px -28px rgba(0,0,0,.5);
-  }
-  .tear {
-    height: 10px;
-    background:
-      linear-gradient(45deg, transparent 33.4%, var(--paper) 33.6%) 0 0/12px 10px repeat-x,
-      linear-gradient(-45deg, transparent 33.4%, var(--paper) 33.6%) 0 0/12px 10px repeat-x;
-  }
-  .tear.top { transform: scaleY(-1); }
+  /* 숫자는 본문과 같은 고딕을 쓰되 자릿수만 고정한다 */
+  #app .num { font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1; }
 
-  .tabs { display: flex; padding: 14px 26px 0; border-bottom: 1px solid var(--ink); }
+  .shell { max-width: 840px; margin: 0 auto; padding: 0 16px; display: flex; flex-direction: column; gap: 12px; }
+
+  /* ---------- 상단 ---------- */
+  .appbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; padding: 4px 4px 0; }
+  .appbar-main { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+  .appbar h1 { margin: 0; font-size: 17px; font-weight: 700; letter-spacing: -.02em; }
+  .rule { width: 3px; height: 3px; border-radius: 50%; background: var(--faint); display: inline-block; }
+  .deadline { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .appbar-side { display: flex; align-items: center; gap: 8px; }
+  .chip {
+    font-size: 12px; font-weight: 700; letter-spacing: -.01em;
+    color: var(--blue); background: var(--blue-tint);
+    border-radius: 999px; padding: 4px 10px; font-variant-numeric: tabular-nums;
+  }
+  .sync-state { font-size: 12.5px; color: var(--muted); display: inline-flex; align-items: center; gap: 5px; }
+  .sync-state::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--faint); }
+  .sync-state.on::before { background: var(--positive); }
+  .sync-state.wait::before { background: var(--warning); }
+  .sync-state.err::before { background: var(--critical); }
+
+  /* ---------- 버튼 ---------- */
+  .btn {
+    font-family: inherit; font-size: 14px; font-weight: 600; letter-spacing: -.01em; line-height: 1.2;
+    padding: 10px 16px; border-radius: 12px; border: 0; cursor: pointer;
+    background: var(--bg); color: var(--ink-2);
+    transition: background .15s ease, color .15s ease, transform .06s ease;
+  }
+  .btn:hover { background: #e8eaed; }
+  .btn:active { transform: scale(.98); }
+  .btn.primary { background: var(--blue); color: #fff; }
+  .btn.primary:hover { background: var(--blue-strong); }
+  .btn.quiet { background: transparent; color: var(--muted); padding: 8px 10px; }
+  .btn.quiet:hover { background: var(--bg); color: var(--ink-2); }
+  .btn.danger { color: var(--critical); background: transparent; }
+  .btn.danger:hover { background: #fef2f3; }
+  .btn:disabled { opacity: .45; cursor: default; }
+
+  /* ---------- 카드 ---------- */
+  .card { background: var(--surface); border-radius: 18px; }
+
+  /* ---------- 동기화 ---------- */
+  .panel { background: var(--surface); border-radius: 18px; padding: 20px; }
+  .panel-note { margin: 0; font-size: 13px; color: var(--muted); line-height: 1.55; }
+  .field { margin: 14px 0; }
+  .field label { display: block; font-size: 13px; font-weight: 600; color: var(--ink-2); margin-bottom: 6px; }
+  .field input {
+    width: 100%; padding: 14px 16px; border: 0; border-radius: 12px;
+    background: var(--soft); font-family: inherit; font-size: 15px; color: var(--ink);
+    font-variant-numeric: tabular-nums;
+  }
+  .field input::placeholder { color: var(--faint); }
+  .field input:focus { outline: 2px solid var(--blue); outline-offset: -2px; background: var(--surface); }
+  .panel-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+
+  /* ---------- 탭 ---------- */
+  .segmented { display: flex; gap: 4px; background: var(--surface); border-radius: 16px; padding: 6px; }
   .tab {
-    flex: 1; appearance: none; cursor: pointer; font-family: var(--sans);
-    background: transparent; border: 1px solid var(--rule); border-bottom: 0;
-    border-radius: 3px 3px 0 0; padding: 9px 6px 8px; margin-bottom: -1px;
-    font-size: 12.5px; color: var(--muted); text-align: center;
+    flex: 1; min-width: 0; appearance: none; cursor: pointer; font-family: inherit;
+    background: transparent; border: 0; border-radius: 12px; padding: 10px 10px;
+    color: var(--muted); text-align: center;
     display: flex; flex-direction: column; gap: 2px; align-items: center;
+    transition: background .15s ease, color .15s ease;
   }
-  .tab + .tab { margin-left: -1px; }
-  .tab span.n { font-family: var(--mono); font-size: 11px; }
-  .tab[aria-selected="true"] {
-    background: var(--paper); color: var(--ink); font-weight: 600;
-    border-color: var(--ink); border-bottom: 1px solid var(--paper);
-    box-shadow: inset 0 3px 0 var(--ink);
+  .tab:hover { background: var(--soft); }
+  .tab strong { font-size: 14px; font-weight: 600; white-space: nowrap; }
+  .tab .n { font-size: 11.5px; color: var(--faint); font-variant-numeric: tabular-nums; }
+  .tab[aria-selected="true"] { background: var(--blue-tint); color: var(--blue); }
+  .tab[aria-selected="true"] strong { font-weight: 700; }
+  .tab[aria-selected="true"] .n { color: var(--blue); opacity: .75; }
+
+  /* ---------- 요약 ---------- */
+  .summary { padding: 24px 22px 6px; }
+  .summary-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; }
+  .eyebrow { margin: 0 0 10px; font-size: 13px; font-weight: 600; color: var(--muted); display: flex; align-items: center; gap: 7px; }
+  .statusdot { width: 8px; height: 8px; border-radius: 50%; background: var(--blue); }
+  .figure {
+    margin: 0; font-size: 38px; font-weight: 700; letter-spacing: -.035em; line-height: 1.1;
+    font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1;
   }
-  .tab:focus-visible { outline: 2px solid var(--stamp); outline-offset: -3px; }
+  .figure.over { color: var(--critical); }
+  .figure-sub { margin: 8px 0 0; font-size: 13.5px; color: var(--muted); }
+  .facts { margin: 0; display: flex; gap: 24px; text-align: right; }
+  .facts dt { font-size: 12.5px; color: var(--muted); }
+  .facts dd { margin: 4px 0 0; font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
 
-  .syncbar {
-    display: flex; justify-content: space-between; align-items: center;
-    padding: 8px 26px 0; font-family: var(--mono); font-size: 11px; color: var(--muted);
-  }
-  .sync-state::before {
-    content: ""; display: inline-block; width: 6px; height: 6px; border-radius: 50%;
-    background: var(--rule); margin-right: 6px; vertical-align: 1px;
-  }
-  .sync-state.on::before { background: var(--fill); }
-  .sync-state.wait::before { background: var(--warn); }
-  .sync-state.err::before { background: var(--stamp); }
-  .linkbtn {
-    background: none; border: 0; padding: 0; cursor: pointer; color: var(--ink);
-    font-family: var(--mono); font-size: 11px; text-decoration: underline;
-  }
+  /* ---------- 진행 막대 ---------- */
+  .bar { margin-top: 22px; }
+  .bar-track { position: relative; height: 10px; background: var(--bg); border-radius: 999px; }
+  .bar-fill { height: 100%; width: 0; background: var(--blue); border-radius: 999px; transition: width .5s cubic-bezier(.2,.8,.2,1), background-color .25s; }
+  .bar-tick { position: absolute; top: -4px; bottom: -4px; width: 2px; margin-left: -1px; background: var(--ink); opacity: .28; border-radius: 999px; pointer-events: none; }
+  .bar-legend { display: flex; justify-content: space-between; gap: 12px; margin-top: 10px; font-size: 12.5px; color: var(--muted); }
+  .bar-legend span:first-child { color: var(--ink-2); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .bar-legend span:last-child { text-align: right; font-variant-numeric: tabular-nums; }
+  .bar-legend .behind { color: var(--warning); font-weight: 600; }
+  .bar-legend .over { color: var(--critical); font-weight: 600; }
 
-  .sync-panel { margin: 10px 26px 0; padding: 12px; border: 1px solid var(--ink); border-radius: 3px; background: rgba(255,255,255,.5); }
-  .sp-note { margin: 0 0 8px; font-size: 11.5px; color: var(--muted); }
-  #vaultNote { margin: 8px 0 0; }
-  #vaultInput {
-    width: 100%; padding: 9px 10px; border: 1px solid var(--rule); border-radius: 3px;
-    font-family: var(--mono); font-size: 12.5px; background: var(--paper); color: var(--ink);
-  }
-  .sp-actions { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
-  .sp-actions .btn { padding: 6px 10px; font-size: 12px; }
+  /* ---------- 지표 ---------- */
+  .metrics { margin: 22px 0 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; padding-bottom: 18px; }
+  .metrics > div { background: var(--soft); border-radius: 12px; padding: 12px 14px; }
+  .metrics dt { font-size: 12px; color: var(--muted); }
+  .metrics dd { margin: 4px 0 0; font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
 
-  .head { padding: 18px 26px; position: relative; }
-  .brand { display: flex; align-items: center; gap: 8px; font-size: 11px; letter-spacing: .18em; color: var(--muted); font-family: var(--mono); }
-  .brand .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--fill); }
-  .head h1 {
-    font-family: var(--mono); font-size: clamp(36px, 8.6vw, 58px);
-    font-weight: 600; letter-spacing: -.03em; margin: 10px 0 2px; font-variant-numeric: tabular-nums;
-  }
-  .head h1.over { color: var(--stamp); }
-  .sub { margin: 0; font-size: 13px; color: var(--muted); }
-  .stamp {
-    position: absolute; top: 18px; right: 22px;
-    font-family: var(--mono); font-size: 13px; font-weight: 700;
-    color: var(--stamp); border: 2px solid var(--stamp);
-    padding: 5px 11px; border-radius: 3px; transform: rotate(-7deg); opacity: .9;
-  }
+  /* ---------- 알림 ---------- */
+  .banner { margin: 0; padding: 14px 16px; font-size: 13.5px; border-radius: 14px; background: #fff8ec; color: #a15c00; font-weight: 500; }
+  .banner.critical { background: #fef2f3; color: var(--critical); }
 
-  .gauge-wrap { padding: 0 26px 20px; }
-  .gauge { height: 14px; background: var(--paper-2); border: 1px solid var(--rule); border-radius: 2px; overflow: hidden; }
-  .gauge-fill {
-    height: 100%; width: 0%; background: var(--fill);
-    background-image: repeating-linear-gradient(90deg, rgba(255,255,255,.22) 0 2px, transparent 2px 6px);
-    transition: width .6s cubic-bezier(.2,.7,.2,1), background-color .3s;
-  }
-  .gauge-labels { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 11px; color: var(--muted); margin-top: 6px; }
-  .gauge-labels span:nth-child(2) { color: var(--ink); font-weight: 600; }
+  /* ---------- 촬영 ---------- */
+  .capture { padding: 20px 22px 22px; transition: background .15s, box-shadow .15s; }
+  .capture.over { background: var(--blue-tint); box-shadow: inset 0 0 0 2px var(--blue); }
+  .capture-head { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
+  .capture-title { margin: 0; font-size: 15px; font-weight: 700; letter-spacing: -.02em; }
+  .capture-sub { margin: 5px 0 0; font-size: 13px; color: var(--muted); }
+  .capture-actions { display: flex; gap: 8px; }
+  .privacy { margin: 16px 0 0; font-size: 12px; color: var(--faint); line-height: 1.5; }
+  .ocr-row { margin: 16px 0 0; padding: 14px 16px; border-radius: 14px; background: var(--soft); display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .ocr-note { font-size: 12.5px; color: var(--muted); flex: 1; min-width: 200px; line-height: 1.5; }
 
-  .stats { display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px dashed var(--rule); border-bottom: 1px dashed var(--rule); margin: 0 26px; }
-  .stat { padding: 12px 0; display: flex; flex-direction: column; gap: 3px; }
-  .stat + .stat { border-left: 1px dashed var(--rule); padding-left: 12px; }
-  .stat .k { font-size: 11px; color: var(--muted); }
-  .stat .v { font-family: var(--mono); font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .cam-panel { margin-top: 16px; }
+  .cam-panel video { width: 100%; max-height: 54vh; display: block; border-radius: 14px; background: #191f28; object-fit: contain; }
+  .cam-actions { display: flex; gap: 8px; margin-top: 10px; }
+  .cam-actions .btn { flex: 1; padding: 15px; font-size: 15px; }
 
-  .alert { margin: 16px 26px 0; padding: 10px 12px; font-size: 12.5px; border-radius: 3px; border-left: 3px solid var(--stamp); background: rgba(176,58,46,.08); color: var(--stamp); }
-  .alert.warn { border-left-color: var(--warn); background: rgba(168,118,42,.1); color: var(--warn); }
-
-  .drop { margin: 20px 26px; padding: 22px 18px; text-align: center; border: 1.5px dashed var(--rule); border-radius: 4px; background: rgba(255,255,255,.35); transition: border-color .2s, background .2s; }
-  .drop.over { border-color: var(--fill); background: rgba(63,107,79,.08); }
-  .drop-title { margin: 0 0 4px; font-size: 14px; font-weight: 600; }
-  .drop-sub { margin: 0 0 14px; font-size: 12px; color: var(--muted); }
-  .drop-actions { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
-  .cam-panel { margin-top: 14px; }
-  .cam-panel video { width: 100%; max-height: 52vh; border-radius: 3px; background: #000; display: block; object-fit: contain; }
-  .cam-actions { display: flex; gap: 8px; margin-top: 8px; }
-  .cam-actions .btn { flex: 1; padding: 12px; font-size: 14px; }
-  .privacy { margin: 12px 0 0; font-size: 11px; color: var(--muted); }
-  .ocr-row { margin: 12px 0 0; display: flex; flex-direction: column; gap: 6px; align-items: center; }
-  .ocr-note { font-size: 11px; color: var(--muted); line-height: 1.45; }
-  .dump { margin-top: 12px; border: 1px solid var(--rule); border-radius: 3px; background: rgba(255,255,255,.6); text-align: left; }
-  .dump-head { display: flex; justify-content: space-between; align-items: center; padding: 7px 10px; border-bottom: 1px solid var(--rule); font-size: 11.5px; color: var(--muted); }
-  .dump-btns { display: flex; gap: 5px; }
-  .dump-btns .btn { padding: 3px 8px; font-size: 11px; }
-  .dump pre { margin: 0; padding: 8px 10px; max-height: 200px; overflow: auto; font-family: var(--mono); font-size: 11px; line-height: 1.5; white-space: pre-wrap; word-break: break-all; }
-
-  .btn { font-family: var(--sans); font-size: 13px; cursor: pointer; border-radius: 3px; padding: 7px 14px; border: 1px solid var(--ink); background: var(--ink); color: var(--paper); transition: opacity .15s; }
-  .btn:hover { opacity: .82; }
-  .btn:focus-visible { outline: 2px solid var(--stamp); outline-offset: 2px; }
-  .btn.ghost { background: transparent; color: var(--ink); border-color: var(--rule); }
-  .btn.ghost.danger { color: var(--stamp); border-color: rgba(176,58,46,.4); }
-
-  .queue { margin-top: 12px; display: flex; flex-direction: column; gap: 6px; }
-  .qitem { display: flex; align-items: center; gap: 8px; justify-content: center; font-family: var(--mono); font-size: 11.5px; color: var(--muted); }
-  .qitem.err { color: var(--stamp); }
-  .spin { width: 10px; height: 10px; border: 2px solid var(--rule); border-top-color: var(--ink); border-radius: 50%; animation: sp .7s linear infinite; }
+  .queue { margin-top: 14px; display: flex; flex-direction: column; gap: 6px; }
+  .qitem { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-radius: 12px; background: var(--blue-tint); color: var(--blue-strong); font-size: 13px; font-weight: 500; }
+  .qitem.err { background: #fef2f3; color: var(--critical); }
+  .spin { width: 12px; height: 12px; flex: none; border: 2px solid rgba(49,130,246,.25); border-top-color: var(--blue); border-radius: 50%; animation: sp .7s linear infinite; }
   @keyframes sp { to { transform: rotate(360deg); } }
 
-  .ledger { padding: 0 26px; }
-  .ledger-head { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--muted); margin-bottom: 8px; gap: 8px; flex-wrap: wrap; }
-  .ledger-head em { font-style: normal; font-family: var(--mono); color: var(--ink); font-weight: 600; }
-  .tools { display: flex; gap: 6px; flex-wrap: wrap; }
-  .tools .btn { padding: 5px 10px; font-size: 12px; }
+  .dump { margin-top: 14px; border-radius: 14px; background: var(--soft); overflow: hidden; }
+  .dump-head { display: flex; justify-content: space-between; align-items: center; padding: 10px 10px 10px 16px; font-size: 12.5px; font-weight: 600; color: var(--ink-2); }
+  .dump-btns { display: flex; gap: 2px; }
+  .dump pre {
+    margin: 0; padding: 0 16px 14px; max-height: 220px; overflow: auto;
+    font-family: inherit; font-size: 12px; line-height: 1.7; color: var(--ink-2);
+    white-space: pre-wrap; word-break: break-all; font-variant-numeric: tabular-nums;
+  }
 
-  .import-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; margin-bottom: 10px; padding: 10px 12px; border: 1px solid var(--ink); border-radius: 3px; background: rgba(255,255,255,.55); font-size: 12.5px; }
-  .import-bar.err { border-color: var(--stamp); color: var(--stamp); }
+  /* ---------- 내역 ---------- */
+  .ledger { padding: 6px 0 0; }
+  .toolbar { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; padding: 14px 22px; }
+  .toolbar-title { font-size: 14px; font-weight: 700; color: var(--ink); }
+  .toolbar-title em { font-style: normal; color: var(--blue); font-variant-numeric: tabular-nums; }
+  .toolbar-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+  .toolbar-actions .btn { padding: 8px 12px; font-size: 13px; }
+
+  .import-bar { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin: 0 22px 14px; padding: 14px 16px; border-radius: 14px; background: var(--blue-tint); color: var(--blue-strong); font-size: 13px; font-weight: 500; }
+  .import-bar.err { background: #fef2f3; color: var(--critical); }
   .ib-actions { display: flex; gap: 6px; }
-  .ib-actions .btn { padding: 5px 10px; font-size: 12px; }
+  .ib-actions .btn { padding: 8px 12px; font-size: 13px; }
+  .import-bar .btn { background: rgba(255,255,255,.75); }
+  .import-bar .btn.primary { background: var(--blue); color: #fff; }
 
-  table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  thead th { font-size: 10.5px; letter-spacing: .1em; color: var(--muted); font-weight: 500; text-align: left; padding: 6px 4px; border-bottom: 1px solid var(--ink); }
-  tbody td { padding: 2px 4px; border-bottom: 1px dotted var(--rule); vertical-align: middle; }
-  tfoot td { padding: 10px 4px; font-family: var(--mono); font-weight: 700; border-top: 1px solid var(--ink); font-variant-numeric: tabular-nums; }
+  .tablewrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  table { width: 100%; border-collapse: collapse; }
+  thead th {
+    position: sticky; top: 0; z-index: 1; background: var(--surface);
+    font-size: 12px; font-weight: 600; color: var(--muted);
+    text-align: left; padding: 8px 8px 10px; white-space: nowrap;
+  }
+  thead th:first-child, tbody td:first-child, tfoot td:first-child { padding-left: 22px; }
+  thead th:last-child, tbody td:last-child, tfoot td:last-child { padding-right: 16px; }
+  tbody tr { transition: background .12s ease; }
+  tbody tr:hover { background: var(--soft); }
+  tbody td { padding: 2px 8px; border-top: 1px solid var(--line); vertical-align: middle; }
+  tfoot td { padding: 16px 8px; border-top: 1px solid var(--line); font-size: 16px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  tfoot td:first-child { font-size: 13px; color: var(--muted); font-weight: 600; }
   .c-amt { text-align: right; }
-  .c-del { width: 26px; }
-  .c-date { width: 108px; }
+  .c-del { width: 38px; }
+  .c-date { width: 132px; }
   table.slim .c-date { width: auto; }
 
-  tbody input { width: 100%; border: 0; background: transparent; padding: 7px 2px; font-family: inherit; font-size: 13px; color: var(--ink); border-radius: 2px; }
-  tbody input:focus { outline: 0; background: rgba(255,255,255,.75); box-shadow: inset 0 -1px 0 var(--ink); }
-  tbody input.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
-  tbody input.amt { text-align: right; font-weight: 600; }
-  .del { border: 0; background: transparent; color: var(--rule); cursor: pointer; font-size: 15px; line-height: 1; padding: 4px; }
-  .del:hover { color: var(--stamp); }
+  tbody input {
+    width: 100%; border: 0; background: transparent; padding: 12px 10px; margin: 2px 0;
+    border-radius: 10px; font-family: inherit; font-size: 14px; color: var(--ink);
+    letter-spacing: -.01em;
+  }
+  tbody input::placeholder { color: var(--faint); font-weight: 400; }
+  tbody input:hover { background: var(--soft); }
+  tbody input:focus { outline: 2px solid var(--blue); outline-offset: -2px; background: var(--surface); }
+  tbody input.mono { font-variant-numeric: tabular-nums; font-size: 13.5px; color: var(--ink-2); }
+  tbody input.amt { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .del { border: 0; background: transparent; color: var(--faint); cursor: pointer; font-size: 17px; line-height: 1; padding: 6px 8px; border-radius: 10px; }
+  .del:hover { color: var(--critical); background: #fef2f3; }
 
-  .empty { font-size: 12.5px; color: var(--muted); text-align: center; padding: 20px 0; margin: 0; }
-  .foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; padding: 18px 26px 20px; margin-top: 10px; border-top: 1px dashed var(--rule); font-family: var(--mono); font-size: 11px; color: var(--muted); }
-  .foot .btn { font-size: 11px; padding: 4px 9px; }
+  .empty { margin: 0; padding: 44px 22px; text-align: center; font-size: 13.5px; color: var(--muted); }
 
-  @media (max-width: 560px) {
-    .stats { grid-template-columns: 1fr 1fr; }
-    .stat:nth-child(3) { border-left: 0; padding-left: 0; }
-    .stat:nth-child(3), .stat:nth-child(4) { border-top: 1px dashed var(--rule); }
-    .head, .gauge-wrap, .ledger, .foot, .tabs, .syncbar { padding-left: 16px; padding-right: 16px; }
-    .stats, .drop, .alert, .sync-panel { margin-left: 16px; margin-right: 16px; }
-    .c-item, thead th.c-item { display: none; }
-    .tab { font-size: 11.5px; padding: 8px 3px; }
-    .tab strong { white-space: nowrap; }
-    .tab span.n { font-size: 10px; line-height: 1.25; }
-    .ledger { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-    table { table-layout: fixed; font-size: 12.5px; }
-    .c-date { width: 88px; }
-    table.slim .c-date { width: auto; }
-    tbody input { font-size: 12.5px; min-width: 0; }
-    .drop-actions { flex-direction: column; }
-    .drop-actions .btn { width: 100%; padding: 12px 14px; font-size: 14px; }
-    .import-bar { flex-direction: column; align-items: stretch; }
+  /* ---------- 하단 ---------- */
+  .statusbar { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; padding: 2px 6px 0; font-size: 12px; color: var(--faint); }
+  .status-left { display: flex; align-items: center; gap: 8px; font-variant-numeric: tabular-nums; }
+  .statusbar .btn { font-size: 12px; padding: 6px 10px; }
+
+  @media (max-width: 620px) {
+    #app { padding-top: 12px; }
+    .shell { padding: 0 12px; gap: 10px; }
+    .appbar-side { width: 100%; justify-content: space-between; }
+    .summary { padding: 22px 18px 4px; }
+    .summary-top { flex-direction: column; gap: 16px; }
+    .facts { text-align: left; gap: 28px; }
+    .figure { font-size: 34px; }
+    .metrics { grid-template-columns: 1fr 1fr; padding-bottom: 16px; }
+    .capture { padding: 18px; }
+    .capture-head { flex-direction: column; align-items: stretch; }
+    .capture-actions { flex-direction: column; }
+    .capture-actions .btn { width: 100%; padding: 15px; font-size: 15px; }
+    .toolbar { padding: 14px 18px; }
+    .import-bar { margin: 0 18px 14px; flex-direction: column; align-items: stretch; }
     .ib-actions { justify-content: flex-end; }
+    thead th:first-child, tbody td:first-child, tfoot td:first-child { padding-left: 18px; }
+    .c-item, thead th.c-item { display: none; }
+    .c-date { width: 104px; }
+    table.slim .c-date { width: auto; }
+    tbody input { font-size: 13.5px; padding: 12px 8px; }
+    .empty { padding: 36px 18px; }
   }
   @media (prefers-reduced-motion: reduce) {
-    .gauge-fill { transition: none; }
+    .bar-fill { transition: none; }
     .spin { animation: none; }
+    .btn:active { transform: none; }
   }
 </style>
-
 <script>
 (function () {
   /* ================= 설정 ================= */
@@ -550,11 +639,12 @@
 
     const big = $('bigNum'), alert = $('alert');
     big.classList.remove('over');
-    alert.hidden = true; alert.className = 'alert';
+    alert.hidden = true; alert.className = 'banner';
 
     if (c.mode === 'target') {
-      $('gaugeFill').style.background = 'var(--fill)';
-      $('dot').style.background = 'var(--fill)';
+      const done = gap <= 0;
+      $('gaugeFill').style.background = done ? 'var(--positive)' : 'var(--blue)';
+      $('dot').style.background = done ? 'var(--positive)' : 'var(--blue)';
       big.textContent = gap > 0 ? won(gap) : '달성';
       $('bigSub').textContent = gap > 0 ? '9월 14일까지 더 채워야 하는 금액' : '목표 금액을 채웠습니다';
       $('k1').textContent = '채운 금액'; $('v1').textContent = won(used);
@@ -562,8 +652,8 @@
       $('k4').textContent = '주당 필요'; $('v4').textContent = gap > 0 ? won(gap / d * 7) : '—';
     } else {
       const over = used > c.goal;
-      $('gaugeFill').style.background = over ? 'var(--stamp)' : (pct >= 80 ? 'var(--warn)' : 'var(--fill)');
-      $('dot').style.background = over ? 'var(--stamp)' : 'var(--fill)';
+      $('gaugeFill').style.background = over ? 'var(--critical)' : (pct >= 80 ? 'var(--warning)' : 'var(--blue)');
+      $('dot').style.background = over ? 'var(--critical)' : (pct >= 80 ? 'var(--warning)' : 'var(--blue)');
       big.textContent = over ? '+' + won(used - c.goal) : won(gap);
       if (over) big.classList.add('over');
       $('bigSub').textContent = over ? '한도를 초과했습니다' : '한도까지 남은 여유';
@@ -571,11 +661,44 @@
       $('k3').textContent = '하루 평균 여유'; $('v3').textContent = over ? '없음' : won(gap / d);
       $('k4').textContent = '한도 소진율'; $('v4').textContent = pct.toFixed(1) + '%';
       if (over) {
-        alert.hidden = false;
+        alert.hidden = false; alert.className = 'banner critical';
         alert.textContent = '누적 ' + won(used) + '으로 한도를 ' + won(used - c.goal) + ' 넘었습니다.';
       } else if (pct >= 80) {
-        alert.hidden = false; alert.classList.add('warn');
+        alert.hidden = false;
         alert.textContent = '한도의 ' + pct.toFixed(0) + '%를 썼습니다. 남은 여유는 ' + won(gap) + '입니다.';
+      }
+    }
+
+    // 진도 기준선: 첫 영수증부터 마감까지 고르게 채운다고 볼 때 오늘 서 있어야 할 위치
+    const tick = $('paceTick'), note = $('paceNote');
+    tick.hidden = true; note.textContent = ''; note.className = '';
+    const firstMs = rows().length ? Date.parse(String(rows()[0].date || '').replace(' ', 'T')) : NaN;
+    if (!isNaN(firstMs) && firstMs < DEADLINE.getTime()) {
+      const span = DEADLINE.getTime() - firstMs;
+      const gone = Math.min(Math.max(Date.now() - firstMs, 0), span);
+      if (gone / 86400000 >= 2) {
+        if (c.mode === 'target') {
+          const expect = gone / span * 100;
+          tick.style.left = Math.min(100, expect).toFixed(2) + '%';
+          tick.hidden = false;
+          const diff = (pct - expect) / 100 * c.goal;
+          if (diff >= 0) {
+            note.textContent = '기준 진도보다 ' + won(diff) + ' 앞섬';
+          } else {
+            note.textContent = '기준 진도보다 ' + won(-diff) + ' 뒤짐';
+            note.className = 'behind';
+          }
+        } else {
+          const projected = used / gone * span;
+          tick.style.left = Math.min(100, projected / c.goal * 100).toFixed(2) + '%';
+          tick.hidden = false;
+          if (projected > c.goal) {
+            note.textContent = '이 속도면 마감에 ' + won(projected) + ' · 한도 초과';
+            note.className = 'over';
+          } else {
+            note.textContent = '이 속도면 마감에 ' + won(projected);
+          }
+        }
       }
     }
 
@@ -796,7 +919,7 @@
   let lastLines = [];
   function showDump() {
     $('dumpText').textContent = lastLines.length
-      ? lastLines.map(l => String(Math.round(l.h)).padStart(3, ' ') + ' | ' + l.t).join('\n')
+      ? lastLines.map(l => Math.round(l.h) + 'px · ' + l.t).join('\n')
       : '(인식된 글자 없음)';
     $('dumpBox').hidden = false;
   }
@@ -1350,8 +1473,8 @@
   if (hasCam || (window.matchMedia && window.matchMedia('(pointer: coarse)').matches)) {
     $('scan').hidden = false;
     $('pick').classList.add('ghost');
-    $('pick').textContent = '사진첩에서 고르기';
-    $('dropTitle').textContent = '영수증을 찍으면 바로 읽어서 넣습니다';
+    $('pick').textContent = '사진에서 선택';
+    $('dropTitle').textContent = '영수증을 촬영하면 일시와 금액을 읽어 넣습니다';
   }
   $('diag').textContent = '카메라 ' + (hasCam ? '○' : '×') +
     ' · 인식 ' + (('TextDetector' in window) ? '내장' : (ocrOn ? '정밀' : '없음'));
