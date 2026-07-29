@@ -801,25 +801,44 @@
     $('dumpBox').hidden = false;
   }
 
-  const AMT_LABELS = [    { re: /요금\s*총액|total\s*fare|총\s*요금/i, w: 7 },
-    { re: /총\s*금액|총\s*액|합계\s*금액|총\s*계|total\s*amount/i, w: 6 },
-    { re: /합\s*계|금액\s*계|total/i, w: 5 },
-    { re: /승인\s*금액|카드\s*승인/, w: 4 },
-    { re: /결제\s*금액|받은\s*금액|받을\s*금액|청구\s*금액|판매\s*금액/, w: 3 }
+  const AMT_LABELS = [    { re: /요\s*금\s*[총송충]\s*[액엑먹]|total\s*fare|[총송]\s*요\s*금/i, w: 7 },
+    { re: /[총송]\s*금\s*[액엑]|[총송]\s*[액엑]|합\s*계\s*금\s*[액엑]|[총송]\s*계|total\s*amount/i, w: 6 },
+    { re: /합\s*계|금\s*[액엑]\s*계|total/i, w: 5 },
+    { re: /승\s*인\s*금\s*[액엑]|카\s*드\s*승\s*인/, w: 4 },
+    { re: /결\s*제\s*금\s*[액엑]|받\s*은\s*금\s*[액엑]|받\s*을\s*금\s*[액엑]|청\s*구\s*금\s*[액엑]|판\s*매\s*금\s*[액엑]/, w: 3 }
   ];
-  const DATE_LABEL = /일\s*시|일\s*자|거래\s*일|date|승차|탑승/i;
+  const DATE_LABEL = /일\s*시|일\s*자|거\s*래\s*일|date|승\s*차|탑\s*승/i;
+
+  // 0을 6·8·9로, 1을 7로 잘못 읽는 일이 잦다. 범위를 벗어난 월·일을 되살린다.
+  function repairPart(s, max) {
+    const n = +s;
+    if (n >= 1 && n <= max) return n;
+    if (s.length !== 2) return null;
+    const tens = s[0], units = s[1];
+    const cands = [];
+    if ('6890'.indexOf(tens) >= 0) cands.push(+('0' + units));   // 6/8/9 → 0
+    if ('71'.indexOf(tens) >= 0) cands.push(+('1' + units));      // 7 → 1
+    if (max === 31 && '23'.indexOf(tens) >= 0) cands.push(+(tens + units));
+    for (let i = 0; i < cands.length; i++) {
+      if (cands[i] >= 1 && cands[i] <= max) return cands[i];
+    }
+    return null;
+  }
 
   function grabDate(raw) {
     const s = normNums(raw);
-    let m = s.match(/(20\d{2})\s*[-./년]\s*(\d{1,2})\s*[-./월]\s*(\d{1,2})/);
     let y, mo, dd;
-    if (m) { y = +m[1]; mo = +m[2]; dd = +m[3]; }
-    else {
+    let m = s.match(/(20\d{2})\s*[-./년]\s*(\d{1,2})\s*[-./월]\s*(\d{1,2})/);
+    if (m) {
+      y = +m[1];
+      mo = repairPart(m[2], 12);   // 연도가 분명하면 깨진 월·일을 되살린다
+      dd = repairPart(m[3], 31);
+    } else {
       m = s.match(/\b(\d{2})[-./](\d{1,2})[-./](\d{1,2})\b/);
       if (!m) return null;
       y = 2000 + +m[1]; mo = +m[2]; dd = +m[3];
     }
-    if (mo < 1 || mo > 12 || dd < 1 || dd > 31) return null;
+    if (!mo || !dd || mo < 1 || mo > 12 || dd < 1 || dd > 31) return null;
     const t = s.match(/(\d{1,2})\s*:\s*(\d{2})/);
     const hh = t ? Math.min(23, +t[1]) : 0;
     const mi = t ? t[2] : '00';
@@ -841,13 +860,27 @@
     if (!date) date = grabDate(joined.replace(/\n/g, ' '));
 
     /* --- 금액: 라벨 우선, 없으면 가장 큰 글씨 --- */
+    // 라벨 주변에서 금액을 찾되, 쉼표나 '원'이 붙은 값을 먼저 믿는다
+    function nearMoney(i, labelRe) {
+      const tries = [lines[i].t.replace(labelRe, '')];
+      if (lines[i + 1]) tries.push(lines[i + 1].t);
+      if (lines[i + 2]) tries.push(lines[i + 2].t);
+      for (let k = 0; k < tries.length; k++) {
+        const strong = moneyIn(tries[k]).filter(x => x.strong);
+        if (strong.length) return Math.max.apply(null, strong.map(x => x.v));
+      }
+      for (let k = 0; k < tries.length; k++) {
+        const v = pickMoney(tries[k]);
+        if (v) return v;
+      }
+      return null;
+    }
+
     let best = null;
     lines.forEach((ln, i) => {
       AMT_LABELS.forEach(lb => {
         if (!lb.re.test(ln.t)) return;
-        let v = pickMoney(ln.t.replace(lb.re, ''));
-        if (v == null && lines[i + 1]) v = pickMoney(lines[i + 1].t);
-        if (v == null && lines[i + 2]) v = pickMoney(lines[i + 2].t);
+        const v = nearMoney(i, lb.re);
         if (v != null && v > 0 && (!best || lb.w > best.w)) best = { v: v, w: lb.w };
       });
     });
