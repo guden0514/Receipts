@@ -191,7 +191,7 @@
     -webkit-text-size-adjust: 100%;
     text-size-adjust: 100%;
     word-break: keep-all;
-    overflow-wrap: anywhere;
+    overflow-wrap: break-word;
   }
   #app * { box-sizing: border-box; }
   #app :focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; border-radius: 8px; }
@@ -365,7 +365,9 @@
   tbody td { padding: 2px 8px; border-top: 1px solid var(--line); vertical-align: middle; }
   tfoot td { padding: 16px 8px; border-top: 1px solid var(--line); font-size: 16px; font-weight: 700; font-variant-numeric: tabular-nums; }
   tfoot td:first-child { font-size: 13px; color: var(--muted); font-weight: 600; }
-  .c-amt { text-align: right; }
+  .c-amt { text-align: right; white-space: nowrap; }
+  .c-amt input { white-space: nowrap; min-width: 92px; }
+  tfoot td, tfoot td:first-child { white-space: nowrap; }
   .c-del { width: 38px; }
   .c-date { width: 132px; }
   table.slim .c-date { width: auto; }
@@ -407,7 +409,35 @@
     .import-bar { margin: 0 18px 14px; flex-direction: column; align-items: stretch; }
     .ib-actions { justify-content: flex-end; }
     thead th:first-child, tbody td:first-child, tfoot td:first-child { padding-left: 18px; }
-    .c-item, thead th.c-item { display: none; }
+
+    /* 좁은 화면: 표를 목록으로 바꿔 상호·일시·금액을 한 화면에 둔다 */
+    .tablewrap { overflow-x: visible; }
+    #table, #table tbody, #table tfoot { display: block; width: 100%; }
+    #table thead { display: none; }
+    #table tbody tr {
+      display: grid; align-items: center; gap: 0 10px;
+      grid-template-columns: minmax(0, 1fr) auto auto;
+      grid-template-areas: "place amount del" "date amount del";
+      padding: 8px 18px; border-top: 1px solid var(--line);
+    }
+    #table.slim tbody tr { grid-template-areas: "date amount del"; }
+    #table tbody td { display: block; padding: 0; border: 0; min-width: 0; }
+    #table tbody td.c-place { grid-area: place; }
+    #table tbody td.c-date { grid-area: date; width: auto; }
+    #table tbody td.c-amt { grid-area: amount; }
+    #table tbody td.c-del { grid-area: del; }
+    #table tbody td.c-item { display: none; }
+
+    #table tbody td.c-place input { font-weight: 600; font-size: 14px; padding: 6px 8px; }
+    #table tbody td.c-date input { font-size: 12.5px; color: var(--muted); padding: 4px 8px; }
+    #table.slim tbody td.c-date input { font-size: 14px; color: var(--ink); font-weight: 600; padding: 10px 8px; }
+    #table tbody td.c-amt input { font-size: 15px; padding: 8px 6px; min-width: 88px; }
+
+    #table tfoot tr { display: flex; align-items: center; justify-content: space-between; padding: 16px 18px; border-top: 1px solid var(--line); }
+    #table tfoot td { display: block; padding: 0; border: 0; }
+    #table tfoot td:first-child { padding-left: 0; }
+    #table tfoot td:last-child { display: none; }
+
     .c-date { width: 104px; }
     table.slim .c-date { width: auto; }
     tbody input { font-size: 13.5px; padding: 12px 8px; }
