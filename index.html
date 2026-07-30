@@ -916,32 +916,54 @@
     return Math.max.apply(null, pool.map(x => x.v));
   }
 
+  // 한 글자마다 떨어져 인식된 구간을 붙인다
+  function squeezeHangul(s) {
+    return String(s).replace(/(^|\s)([가-힣](?:\s[가-힣]){2,})(?=\s|$)/g,
+      function (m, pre, run) { return pre + run.replace(/\s+/g, ''); });
+  }
+
   // 인식된 글자 블록을 눈에 보이는 줄로 묶고, 줄의 글자 크기도 함께 남긴다
   function blocksToLines(blocks) {
-    const items = blocks.map(b => ({
-      x: b.boundingBox.x, y: b.boundingBox.y, h: b.boundingBox.height,
-      t: String(b.rawValue || '').trim()
-    })).filter(o => o.t);
+    const items = blocks.map(function (b) {
+      const bb = b.boundingBox || {};
+      const t = String(b.rawValue || '').trim();
+      return {
+        x: bb.x || 0, y: bb.y || 0,
+        h: bb.height || 1,
+        w: bb.width || (bb.height || 1) * Math.max(1, t.length) * 0.95,
+        t: t
+      };
+    }).filter(function (o) { return o.t; });
     if (!items.length) return [];
-    items.sort((a, b) => (a.y - b.y) || (a.x - b.x));
+    items.sort(function (a, b) { return (a.y - b.y) || (a.x - b.x); });
 
     const lines = [];
-    items.forEach(it => {
+    items.forEach(function (it) {
       const cy = it.y + it.h / 2;
       const tol = Math.max(10, it.h * 0.6);
       let line = null;
-      for (const l of lines) { if (Math.abs(l.cy - cy) < tol) { line = l; break; } }
+      for (let i = 0; i < lines.length; i++) {
+        if (Math.abs(lines[i].cy - cy) < tol) { line = lines[i]; break; }
+      }
       if (!line) { line = { cy: cy, parts: [] }; lines.push(line); }
       line.parts.push(it);
-      line.cy = line.parts.reduce((s, p) => s + p.y + p.h / 2, 0) / line.parts.length;
+      line.cy = line.parts.reduce(function (s, p) { return s + p.y + p.h / 2; }, 0) / line.parts.length;
     });
-    lines.sort((a, b) => a.cy - b.cy);
+    lines.sort(function (a, b) { return a.cy - b.cy; });
 
-    return lines.map(l => {
-      const parts = l.parts.sort((a, b) => a.x - b.x);
+    return lines.map(function (l) {
+      const parts = l.parts.sort(function (a, b) { return a.x - b.x; });
+      let text = '';
+      parts.forEach(function (p, i) {
+        if (i === 0) { text = p.t; return; }
+        const prev = parts[i - 1];
+        const gap = p.x - (prev.x + prev.w);         // 조각 사이 실제 간격
+        const threshold = Math.max(3, p.h * 0.3);     // 글자 높이의 30%보다 벌어지면 공백
+        text += (gap > threshold ? ' ' : '') + p.t;
+      });
       return {
-        t: parts.map(p => p.t).join(' '),
-        h: Math.max.apply(null, parts.map(p => p.h)),
+        t: squeezeHangul(text).replace(/\s{2,}/g, ' ').trim(),
+        h: Math.max.apply(null, parts.map(function (p) { return p.h; })),
         y: l.cy
       };
     });
@@ -1063,6 +1085,7 @@
       const c = texts.find(l => /점$|㈜|\(주\)|주식회사|택시/.test(l) && !NOISE.test(l) && !/주소|정보/.test(l));
       if (c) place = c.trim();
     }
+    place = squeezeHangul(place).replace(/\s{2,}/g, ' ').replace(/[\s:：\-·.,]+$/, '').trim();
 
     return { date: date || '', place: place, amount: amount };
   }
@@ -1185,7 +1208,11 @@
     if (words.length) {
       return blocksToLines(words.filter(w => w.text && w.text.trim()).map(w => ({
         rawValue: w.text,
-        boundingBox: { x: w.bbox.x0, y: w.bbox.y0, height: Math.max(1, w.bbox.y1 - w.bbox.y0) }
+        boundingBox: {
+          x: w.bbox.x0, y: w.bbox.y0,
+          height: Math.max(1, w.bbox.y1 - w.bbox.y0),
+          width: Math.max(1, w.bbox.x1 - w.bbox.x0)
+        }
       })));
     }
     return String(data.text || '').split('\n').map(t => t.trim()).filter(Boolean)
@@ -1512,6 +1539,24 @@
     ' · 인식 ' + (('TextDetector' in window) ? '내장' : (ocrOn ? '정밀' : '없음'));
   refreshOcrRow();
 
-  loadLocal().then(() => { render(); return syncNow(); });
+  // 예전에 한 글자씩 띄어 들어간 상호를 한 번 정리한다
+  function tidyPlaces() {
+    let changed = false;
+    TABS.forEach(function (t) {
+      store[t.id].forEach(function (r) {
+        if (!r.place) return;
+        const fixed = squeezeHangul(r.place).replace(/\s{2,}/g, ' ').replace(/[\s:：\-·.,]+$/, '').trim();
+        if (fixed && fixed !== r.place) {
+          r.place = fixed;
+          r.updated_at = nowISO();
+          markDirty(r.id);
+          changed = true;
+        }
+      });
+    });
+    if (changed) saveLocal();
+  }
+
+  loadLocal().then(function () { tidyPlaces(); render(); return syncNow(); });
 })();
 </script>
