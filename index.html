@@ -1022,70 +1022,124 @@
     return y + '-' + pad(mo) + '-' + pad(dd) + ' ' + pad(hh) + ':' + mi;
   }
 
-  function parseReceiptText(lines) {
-    const texts = lines.map(l => l.t);
+  const PLACE_NOISE = /^(영\s*수\s*증|매출\s*전표|신용\s*카드|카드\s*매출|현금\s*영수증|간이\s*영수증|승인\s*내역|고객용|가맹점용|보관용|receipt|copy)[\s:：)\]\-]*/i;
+
+  // 상호는 낱글자 띄어쓰기를 모두 붙이고, 앞뒤 군더더기를 떼낸다
+  function tidyPlace(s) {
+    let t = String(s || '');
+    t = t.replace(/\((?:receipt|copy)[^)]*\)/ig, ' ');
+    t = t.replace(/보관용|고객용|가맹점용/g, ' ');
+    t = t.replace(/\s{2,}/g, ' ').trim();
+    for (let i = 0; i < 3; i++) t = t.replace(PLACE_NOISE, '').trim();
+    t = t.replace(/^[\s:：\-·.,\[\]]+/, '').replace(/[\s:：\-·.,]+$/, '').trim();
+
+    // 낱글자로 쪼개진 흔적이 하나라도 있으면, 붙어 있어야 할 한글 토막을 모두 잇는다
+    const tok = t.split(' ');
+    const brokenup = tok.some(function (x) { return /^[가-힣]$/.test(x); });
+    if (brokenup) {
+      const out = [];
+      tok.forEach(function (x) {
+        const prev = out.length ? out[out.length - 1] : '';
+        if (out.length && /[가-힣]$/.test(prev) && /^[가-힣]/.test(x)) out[out.length - 1] = prev + x;
+        else out.push(x);
+      });
+      t = out.join(' ');
+    }
+    return t.replace(/\s{2,}/g, ' ').trim();
+  }
+
+  // lines: 글자 인식 결과 / numLines: 숫자 전용 인식 결과(있으면 숫자는 이쪽을 믿는다)
+  function parseReceiptText(lines, numLines) {
+    const nums = (numLines && numLines.length) ? numLines : lines;
+    const texts = lines.map(function (l) { return l.t; });
     const joined = texts.join('\n');
 
-    /* --- 일시: 라벨이 있는 줄을 먼저 본다 --- */
-    let date = null;
-    for (let i = 0; i < lines.length && !date; i++) {
-      if (!DATE_LABEL.test(texts[i])) continue;
-      date = grabDate(texts[i]);
-      if (!date && texts[i + 1]) date = grabDate(texts[i] + ' ' + texts[i + 1]);
+    // 기준 줄과 같은 줄이거나 바로 아래에 있는 숫자 줄
+    function band(ref) {
+      const h = ref.h || 20;
+      return nums.filter(function (n) { return n.y >= ref.y - h * 0.7 && n.y <= ref.y + h * 3.2; });
     }
-    if (!date) for (let i = 0; i < texts.length && !date; i++) date = grabDate(texts[i]);
-    if (!date) date = grabDate(joined.replace(/\n/g, ' '));
-
-    /* --- 금액: 라벨 우선, 없으면 가장 큰 글씨 --- */
-    // 라벨 주변에서 금액을 찾되, 쉼표나 '원'이 붙은 값을 먼저 믿는다
-    function nearMoney(i, labelRe) {
-      const tries = [lines[i].t.replace(labelRe, '')];
-      if (lines[i + 1]) tries.push(lines[i + 1].t);
-      if (lines[i + 2]) tries.push(lines[i + 2].t);
-      for (let k = 0; k < tries.length; k++) {
-        const strong = moneyIn(tries[k]).filter(x => x.strong);
-        if (strong.length) return Math.max.apply(null, strong.map(x => x.v));
+    function orderedNear(ref) {
+      return band(ref).slice().sort(function (a, b) {
+        return Math.abs(a.y - ref.y) - Math.abs(b.y - ref.y);
+      });
+    }
+    function bestIn(arr) {
+      for (let i = 0; i < arr.length; i++) {
+        const c = moneyIn(arr[i].t).filter(function (x) { return x.strong; });
+        if (c.length) return Math.max.apply(null, c.map(function (x) { return x.v; }));
       }
-      for (let k = 0; k < tries.length; k++) {
-        const v = pickMoney(tries[k]);
-        if (v) return v;
+      for (let i = 0; i < arr.length; i++) {
+        const c = moneyIn(arr[i].t);
+        if (c.length) return Math.max.apply(null, c.map(function (x) { return x.v; }));
       }
       return null;
     }
 
+    /* --- 금액: 라벨 주변 → 없으면 가장 크게 찍힌 숫자 --- */
     let best = null;
-    lines.forEach((ln, i) => {
-      AMT_LABELS.forEach(lb => {
+    lines.forEach(function (ln, i) {
+      AMT_LABELS.forEach(function (lb) {
         if (!lb.re.test(ln.t)) return;
-        const v = nearMoney(i, lb.re);
+        const own = { t: ln.t.replace(lb.re, ''), h: ln.h, y: ln.y };
+        const v = bestIn([own].concat(orderedNear(ln)));
         if (v != null && v > 0 && (!best || lb.w > best.w)) best = { v: v, w: lb.w };
       });
     });
-
     let amount = best ? best.v : 0;
+
     if (!amount) {
-      // 영수증에서 금액은 대개 가장 크게 찍힌다
       let top = null;
-      lines.forEach(ln => {
-        if (NOISE.test(ln.t)) return;
-        const v = pickMoney(ln.t);
-        if (v == null || v <= 0) return;
-        if (!top || ln.h > top.h * 1.05 || (Math.abs(ln.h - top.h) <= top.h * 0.05 && v > top.v)) {
-          top = { v: v, h: ln.h };
-        }
+      nums.forEach(function (l) {
+        if (NOISE.test(l.t)) return;
+        const c = moneyIn(l.t);
+        if (!c.length) return;
+        const strong = c.filter(function (x) { return x.strong; });
+        const pool = strong.length ? strong : c;
+        const v = Math.max.apply(null, pool.map(function (x) { return x.v; }));
+        const score = (l.h || 1) * (strong.length ? 1.2 : 1);
+        if (!top || score > top.score) top = { score: score, v: v };
       });
       amount = top ? top.v : 0;
     }
 
+    /* --- 일시: 라벨 줄 주변 → 숫자 줄 전체 → 글자 줄 전체 --- */
+    let date = null;
+    for (let i = 0; i < lines.length && !date; i++) {
+      if (!DATE_LABEL.test(texts[i])) continue;
+      const near = orderedNear(lines[i]);
+      for (let k = 0; k < near.length && !date; k++) date = grabDate(near[k].t);
+      if (!date) date = grabDate(texts[i]);
+    }
+    for (let i = 0; i < nums.length && !date; i++) date = grabDate(nums[i].t);
+    for (let i = 0; i < texts.length && !date; i++) date = grabDate(texts[i]);
+
     /* --- 상호 --- */
     let place = '';
-    const p = joined.match(/(?:상\s*호|가맹점\s*명)\s*[:：]?\s*([^\n]+)/);
-    if (p && !/^(정보|내역|명)$/.test(p[1].trim())) place = p[1].trim();
-    if (!place) {
-      const c = texts.find(l => /점$|㈜|\(주\)|주식회사|택시/.test(l) && !NOISE.test(l) && !/주소|정보/.test(l));
-      if (c) place = c.trim();
+    const p = joined.match(/(?:상\s*호|가맹점\s*명|상\s*호\s*명)\s*[:：]?\s*([^\n]+)/);
+    if (p && !/^(정보|내역|명)$/.test(p[1].trim())) place = p[1];
+    if (!tidyPlace(place)) {
+      place = '';
+      const c = texts.find(function (l) {
+        return /점$|㈜|\(주\)|주식회사|택시/.test(l) && !NOISE.test(l) && !/주소|정보/.test(l);
+      });
+      if (c) place = c;
     }
-    place = squeezeHangul(place).replace(/\s{2,}/g, ' ').replace(/[\s:：\-·.,]+$/, '').trim();
+    place = tidyPlace(place);
+    if (!place) {
+      // 그래도 못 찾으면 위쪽에서 한글이 들어간 가장 큰 줄을 후보로 넣는다
+      const top = lines.slice(0, Math.max(6, Math.ceil(lines.length * 0.4)))
+        .filter(function (l) {
+          const t = l.t;
+          if (NOISE.test(t) || /주소|정보|영수증|Receipt/i.test(t)) return false;
+          if (!/[가-힣]/.test(t)) return false;
+          if ((t.match(/[가-힣]/g) || []).length < 2) return false;
+          if (moneyIn(t).length || grabDate(t)) return false;
+          return true;
+        })
+        .sort(function (a, b) { return b.h - a.h; })[0];
+      if (top) place = tidyPlace(top.t);
+    }
 
     return { date: date || '', place: place, amount: amount };
   }
@@ -1169,10 +1223,10 @@
   const OCRKEY = 'receipts:ocr';
   let ocrOn = false;
   try { ocrOn = LS && LS.getItem(OCRKEY) === 'on'; } catch (e) {}
-  let tessWorker = null, tessLoading = null;
+  let tessKor = null, tessNum = null, tessLoading = null;
 
   async function loadTesseract(onStatus) {
-    if (tessWorker) return tessWorker;
+    if (tessKor && tessNum) return true;
     if (tessLoading) return tessLoading;
     tessLoading = (async () => {
       if (!window.Tesseract) {
@@ -1185,15 +1239,22 @@
           document.head.appendChild(s);
         });
       }
-      onStatus && onStatus('한국어 인식 자료 준비 중…');
-      tessWorker = await window.Tesseract.createWorker('kor+eng', 1, {
-        logger: m => {
-          if (!onStatus) return;
-          const pct = m.progress ? ' ' + Math.round(m.progress * 100) + '%' : '';
-          if (m.status && /load|initial|download/i.test(m.status)) onStatus('인식 자료 준비 중…' + pct);
-        }
-      });
-      return tessWorker;
+      const log = label => m => {
+        if (!onStatus) return;
+        const pct = m.progress ? ' ' + Math.round(m.progress * 100) + '%' : '';
+        if (m.status && /load|initial|download/i.test(m.status)) onStatus(label + pct);
+      };
+      if (!tessKor) {
+        onStatus && onStatus('한국어 인식 자료 준비 중…');
+        tessKor = await window.Tesseract.createWorker('kor+eng', 1, { logger: log('한국어 자료 준비 중…') });
+      }
+      if (!tessNum) {
+        onStatus && onStatus('숫자 인식 자료 준비 중…');
+        tessNum = await window.Tesseract.createWorker('eng', 1, { logger: log('숫자 자료 준비 중…') });
+        // 숫자와 구분기호만 인식하게 묶어두면 0과 O, 1과 l을 헷갈리지 않는다
+        await tessNum.setParameters({ tessedit_char_whitelist: '0123456789,.:-/' });
+      }
+      return true;
     })();
     try { return await tessLoading; }
     catch (e) { tessLoading = null; throw e; }
@@ -1219,12 +1280,111 @@
       .map((t, i) => ({ t: t, h: 1, y: i }));
   }
 
+  // 두 인식이 같은 좌표를 쓰도록 하나의 다듬은 이미지를 만든다
+  async function prepCanvas(file, scale) {
+    const bmp = await createImageBitmap(file);
+    const maxEdge = 2600;
+    let w = Math.round(bmp.width * scale), h = Math.round(bmp.height * scale);
+    const cap = Math.min(1, maxEdge / Math.max(w, h));
+    w = Math.max(1, Math.round(w * cap)); h = Math.max(1, Math.round(h * cap));
+    const cv = document.createElement('canvas');
+    cv.width = w; cv.height = h;
+    const ctx = cv.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(bmp, 0, 0, w, h);
+    if (bmp.close) bmp.close();
+    const img = ctx.getImageData(0, 0, w, h), d = img.data;
+    for (let i = 0; i < d.length; i += 4) {
+      const g = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+      const v = Math.max(0, Math.min(255, (g - 112) * 1.8 + 112));
+      d[i] = d[i + 1] = d[i + 2] = v;
+    }
+    ctx.putImageData(img, 0, 0);
+    return cv;
+  }
+
   async function readWithEngine(file, target, onStatus) {
-    const w = await loadTesseract(onStatus);
+    await loadTesseract(onStatus);
+
+    onStatus && onStatus('사진 다듬는 중…');
+    const cv = await prepCanvas(file, 2);
+
+    onStatus && onStatus('글자 읽는 중…');
+    const outK = await tessKor.recognize(cv, {}, { text: true, blocks: true });
+    const linesK = tessToLines(outK.data || {});
+
+    onStatus && onStatus('숫자 다시 확인하는 중…');
+    let linesN = [];
+    try {
+      const outN = await tessNum.recognize(cv, {}, { text: true, blocks: true });
+      linesN = tessToLines(outN.data || {});
+    } catch (e) { /* 숫자 확인이 실패하면 글자 결과만 쓴다 */ }
+
+    cv.width = cv.height = 0;
+    if (!linesK.length && !linesN.length) throw new Error('글자를 인식하지 못했습니다');
+
+    lastLines = linesK
+      .concat(linesN.map(l => ({ t: '숫자· ' + l.t, h: l.h, y: l.y })))
+      .sort((a, b) => a.y - b.y);
+
+    const r = parseReceiptText(linesK.length ? linesK : linesN, linesN);
+    const slim = !!TABS.find(t => t.id === target).slim;
+    const rec = {
+      id: uid(),
+      date: r.date || fmtDT(new Date(file.lastModified || Date.now())),
+      place: slim ? '' : (r.place || ''),
+      items: '', amount: r.amount || 0, updated_at: nowISO()
+    };
+    rec._readDate = !!r.date;
+    store[target].push(rec); markDirty(rec.id);
+    return rec;
+  }
+
+  /* ---------- 1순위: 서버 중계 인식 (Google Vision) ---------- */
+  let visionOff = false;   // 설정이 안 됐거나 막히면 이번 접속에선 다시 시도하지 않는다
+
+  async function toBase64(file, maxEdge) {
+    const shot = await toJpeg(file, maxEdge);
+    return shot.data;
+  }
+
+  async function readWithVision(file, target, onStatus) {
+    if (!vault) throw new Error('동기화 키가 없어 서버 인식을 쓸 수 없습니다');
+    onStatus && onStatus('사진 준비 중…');
+    const b64 = await toBase64(file, 1800);
+
     onStatus && onStatus('영수증 읽는 중…');
-    const out = await w.recognize(file, {}, { text: true, blocks: true });
-    const lines = tessToLines(out.data || {});
-    if (!lines.length) throw new Error('글자를 인식하지 못했습니다');
+    const res = await fetch(SB_URL + '/functions/v1/read-receipt', {
+      method: 'POST',
+      headers: {
+        'apikey': SB_KEY,
+        'Authorization': 'Bearer ' + SB_KEY,
+        'x-vault': vault,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ image: b64 })
+    });
+    const data = await res.json().catch(() => null);
+
+    if (!res.ok) {
+      const code = data && data.error;
+      if (code === 'no_key' || code === 'no_vault_configured') {
+        visionOff = true;
+        throw new Error('서버 인식이 아직 설정되지 않았습니다');
+      }
+      if (code === 'not_allowed') {
+        visionOff = true;
+        throw new Error('서버 인식 접근이 거부되었습니다 (키 확인 필요)');
+      }
+      throw new Error('서버 인식 실패' + (data && data.detail ? ' — ' + data.detail : ''));
+    }
+
+    const words = (data && data.words) || [];
+    if (!words.length) throw new Error('글자를 찾지 못했습니다');
+
+    const lines = blocksToLines(words.map(w => ({
+      rawValue: w.t,
+      boundingBox: { x: w.x, y: w.y, width: w.w, height: w.h }
+    })));
     lastLines = lines;
 
     const r = parseReceiptText(lines);
@@ -1250,39 +1410,45 @@
       node.innerHTML = '<span class="spin"></span><span>' + esc(f.name) + ' 읽는 중…</span>';
       $('queue').appendChild(node);
       try {
-        if (!hasAppStore) throw new TypeError('앱 밖 — 기기 인식으로 진행');
-        const n = await readImage(f, target);
-        node.innerHTML = '<span>✓ ' + esc(f.name) + ' — ' + label + '에 ' + n + '건 추가</span>';
-        save(); render();
-        setTimeout(() => node.remove(), 2800);
-      } catch (err) {
-        const offline = err instanceof TypeError || /Failed to fetch|NetworkError|Load failed/i.test(err.message || '');
-        if (!offline) {
-          node.className = 'qitem err';
-          node.innerHTML = '<span>✕ ' + esc(f.name) + ' — ' + esc(err.message) + '</span>';
-          continue;
-        }
         const setMsg = txt => { node.innerHTML = '<span class="spin"></span><span>' + esc(txt) + '</span>'; };
         const canBuiltIn = ('TextDetector' in window) && window.createImageBitmap;
-        try {
-          if (!canBuiltIn && !ocrOn) throw new Error('이 브라우저는 글자 인식 기능이 없습니다. 정밀 인식을 켜세요');
-          const rec = canBuiltIn ? await readOnDevice(f, target) : await readWithEngine(f, target, setMsg);
-          const okAmt = !!rec.amount, okDate = !!rec._readDate;
-          node.className = okAmt ? 'qitem' : 'qitem err';
-          node.innerHTML = '<span>' + (okAmt ? '✓' : '△') + ' ' +
-            (okAmt ? '금액 ' + won(rec.amount) : '금액 못 읽음') + ' · ' +
-            (okDate ? '일시 ' + esc(rec.date) : '일시는 촬영 시각으로 채움') +
-            (okAmt ? ' · 확인 후 수정하세요' : ' — 금액을 입력하세요') + '</span>';
-          pendingFocus = { id: rec.id, field: 'amount' };
+        let rec = null;
+
+        // 1순위: 앱 안이면 앱의 읽기, 그 밖에는 서버 중계 인식
+        if (hasAppStore) {
+          const n = await readImage(f, target);
+          node.innerHTML = '<span>✓ ' + esc(f.name) + ' — ' + label + '에 ' + n + '건 추가</span>';
           save(); render();
-          if (!okAmt || !okDate) showDump(); else $('dumpBox').hidden = true;
-          setTimeout(() => node.remove(), okAmt ? 4000 : 7000);
-        } catch (e2) {
-          node.className = 'qitem err';
-          node.innerHTML = '<span>✕ ' + esc(e2.message) + ' — 금액을 직접 입력하세요</span>';
-          quickAdd(f.lastModified || Date.now(), 'amount');
-          refreshOcrRow();
+          setTimeout(() => node.remove(), 2800);
+          continue;
         }
+        if (!visionOff && vault) {
+          try { rec = await readWithVision(f, target, setMsg); }
+          catch (e0) { setMsg(e0.message + ' — 다른 방법으로 시도합니다'); }
+        }
+
+        // 2순위: 기기 내장 인식 → 3순위: 내려받은 엔진
+        if (!rec) {
+          if (canBuiltIn) rec = await readOnDevice(f, target);
+          else if (ocrOn) rec = await readWithEngine(f, target, setMsg);
+          else throw new Error(vault ? '서버 인식을 쓸 수 없습니다' : '동기화 키를 먼저 연결하세요');
+        }
+
+        const okAmt = !!rec.amount, okDate = !!rec._readDate;
+        node.className = okAmt ? 'qitem' : 'qitem err';
+        node.innerHTML = '<span>' + (okAmt ? '✓' : '△') + ' ' +
+          (okAmt ? '금액 ' + won(rec.amount) : '금액 못 읽음') + ' · ' +
+          (okDate ? '일시 ' + esc(rec.date) : '일시는 촬영 시각으로 채움') +
+          (okAmt ? ' · 확인 후 수정하세요' : ' — 금액을 입력하세요') + '</span>';
+        pendingFocus = { id: rec.id, field: 'amount' };
+        save(); render();
+        if (!okAmt || !okDate) showDump(); else $('dumpBox').hidden = true;
+        setTimeout(() => node.remove(), okAmt ? 4000 : 7000);
+      } catch (err) {
+        node.className = 'qitem err';
+        node.innerHTML = '<span>✕ ' + esc(err.message) + ' — 금액을 직접 입력하세요</span>';
+        quickAdd(f.lastModified || Date.now(), 'amount');
+        refreshOcrRow();
       }
     }
   }
@@ -1536,7 +1702,7 @@
     $('dropTitle').textContent = '영수증을 촬영하면 일시와 금액을 읽어 넣습니다';
   }
   $('diag').textContent = '카메라 ' + (hasCam ? '○' : '×') +
-    ' · 인식 ' + (('TextDetector' in window) ? '내장' : (ocrOn ? '정밀' : '없음'));
+    ' · 인식 ' + (vault ? '서버' : (('TextDetector' in window) ? '내장' : (ocrOn ? '정밀' : '없음')));
   refreshOcrRow();
 
   // 예전에 한 글자씩 띄어 들어간 상호를 한 번 정리한다
