@@ -1367,15 +1367,17 @@
 
     if (!res.ok) {
       const code = data && data.error;
+      const detail = (data && data.detail) ? String(data.detail).slice(0, 160) : '';
       if (code === 'no_key' || code === 'no_vault_configured') {
         visionOff = true;
         throw new Error('서버 인식이 아직 설정되지 않았습니다');
       }
       if (code === 'not_allowed') {
         visionOff = true;
-        throw new Error('서버 인식 접근이 거부되었습니다 (키 확인 필요)');
+        throw new Error('동기화 키가 서버 설정과 다릅니다 (ALLOWED_VAULT 확인)');
       }
-      throw new Error('서버 인식 실패' + (data && data.detail ? ' — ' + data.detail : ''));
+      visionOff = true;
+      throw new Error('구글 인식 거부' + (detail ? ' — ' + detail : ''));
     }
 
     const words = (data && data.words) || [];
