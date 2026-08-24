@@ -134,6 +134,8 @@
         </span>
       </div>
 
+      <div class="months" id="months" hidden></div>
+
       <div class="tablewrap">
         <table id="table">
           <thead id="thead"></thead>
@@ -351,6 +353,19 @@
   .import-bar .btn { background: rgba(255,255,255,.75); }
   .import-bar .btn.primary { background: var(--blue); color: #fff; }
 
+  .months { padding: 0 22px 16px; display: flex; flex-direction: column; gap: 8px; }
+  .month-row {
+    display: grid; grid-template-columns: 64px 1fr auto; align-items: center; gap: 12px;
+    padding: 10px 14px; border-radius: 12px; background: var(--soft);
+  }
+  .month-row .m-label { font-size: 13px; font-weight: 600; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+  .month-row .m-bar { height: 8px; border-radius: 999px; background: #e4e8ed; overflow: hidden; }
+  .month-row .m-bar span { display: block; height: 100%; background: var(--blue); border-radius: 999px; }
+  .month-row .m-right { text-align: right; white-space: nowrap; }
+  .month-row .m-amt { font-size: 14.5px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .month-row .m-cnt { font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .month-row.peak .m-label { color: var(--blue); }
+
   .tablewrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
   table { width: 100%; border-collapse: collapse; }
   thead th {
@@ -406,6 +421,8 @@
     .capture-actions { flex-direction: column; }
     .capture-actions .btn { width: 100%; padding: 15px; font-size: 15px; }
     .toolbar { padding: 14px 18px; }
+    .months { padding: 0 18px 14px; }
+    .month-row { grid-template-columns: 56px 1fr auto; gap: 10px; padding: 9px 12px; }
     .import-bar { margin: 0 18px 14px; flex-direction: column; align-items: stretch; }
     .ib-actions { justify-content: flex-end; }
     thead th:first-child, tbody td:first-child, tfoot td:first-child { padding-left: 18px; }
@@ -650,6 +667,34 @@
     });
   }
 
+  function renderMonths() {
+    const box = $('months');
+    const map = {};
+    rows().forEach(function (r) {
+      const key = String(r.date || '').slice(0, 7);
+      const k = /^\d{4}-\d{2}$/.test(key) ? key : '미상';
+      if (!map[k]) map[k] = { sum: 0, n: 0 };
+      map[k].sum += Number(r.amount) || 0;
+      map[k].n += 1;
+    });
+    const keys = Object.keys(map).sort();
+    if (keys.length < 2) { box.hidden = true; box.innerHTML = ''; return; }
+
+    const peak = Math.max.apply(null, keys.map(function (k) { return map[k].sum; }));
+    box.hidden = false;
+    box.innerHTML = keys.map(function (k) {
+      const v = map[k];
+      const label = k === '미상' ? '미상' : (+k.slice(5, 7)) + '월';
+      const w = peak > 0 ? (v.sum / peak * 100) : 0;
+      return '<div class="month-row' + (v.sum === peak ? ' peak' : '') + '">' +
+        '<span class="m-label">' + label + '</span>' +
+        '<span class="m-bar"><span style="width:' + w.toFixed(1) + '%"></span></span>' +
+        '<span class="m-right"><span class="m-amt">' + v.sum.toLocaleString('ko-KR') + '</span>' +
+        '<br><span class="m-cnt">' + v.n + '건</span></span>' +
+        '</div>';
+    }).join('');
+  }
+
   function render() {
     const c = cfg();
     rows().sort((a, b) => (a.date || '').localeCompare(b.date || ''));
@@ -737,6 +782,7 @@
     $('count').textContent = rows().length;
     $('total').textContent = used.toLocaleString('ko-KR');
     $('empty').hidden = rows().length > 0;
+    renderMonths();
 
     const slim = !!c.slim;
     $('table').classList.toggle('slim', slim);
@@ -1048,6 +1094,32 @@
     return t.replace(/\s{2,}/g, ' ').trim();
   }
 
+<<<<<<< HEAD
+  // 상호 라벨: '상호 :', '상호명', '[매장명]', '(가맹점명)', '점포명' 등 어떤 모양이든
+  const PLACE_LABEL = /[\[\(【｢「]?\s*(?:상\s*호(?:\s*명)?|가\s*맹\s*점(?:\s*명)?|매\s*장(?:\s*명)?|점\s*포(?:\s*명)?|업\s*소(?:\s*명)?|사\s*업\s*장(?:\s*명)?|지\s*점\s*명|store\s*name|shop\s*name|merchant)\s*[\]\)】｣」]?\s*[:：\-]?\s*/i;
+  // 상호일 법한 낱말
+  const PLACE_HINT = /점$|점\s|㈜|\(주\)|주식회사|택시|커피|카페|식당|마트|편의점|베이커리|치킨|버거|피자|주유소|약국|호텔|서점|정육|분식/;
+  // 상호일 리 없는 줄
+  const PLACE_BAD = /주\s*소|전\s*화|사\s*업\s*자|등\s*록\s*번\s*호|대\s*표\s*자|승\s*인|카\s*드|결\s*제|금\s*액|합\s*계|부\s*가\s*세|공\s*급\s*가|일\s*시|영\s*수\s*증|품\s*목|수\s*량|단\s*가|번\s*호|시\s*간|거\s*리|요\s*금|할\s*증|감\s*사/;
+
+  // 주소로 보이는 줄 (상호 자리에 들어가면 안 된다)
+  const ADDRESS = /특별시|광역시|자치시|자치도|[가-힣]{2,}[시군구]\s+[가-힣]{2,}[동읍면로길]|[동로길]\s*\d+[-\d]*\s*(번지|호)?\s*$|\d+층|지하\s*\d/;
+
+  function looksLikePlace(t) {
+    t = String(t || '').trim();
+    if (t.length < 2 || t.length > 40) return false;
+    if (PLACE_BAD.test(t) || NOISE.test(t)) return false;
+    if (ADDRESS.test(t)) return false;
+    if (grabDate(t)) return false;
+    const letters = (t.match(/[가-힣A-Za-z]/g) || []).length;
+    const digits = (t.match(/\d/g) || []).length;
+    if (letters < 2) return false;
+    if (digits > letters) return false;
+    return true;
+  }
+
+=======
+>>>>>>> 5397deabc9fa569bd9f1b7e730c7147d32f9f1e1
   // lines: 글자 인식 결과 / numLines: 숫자 전용 인식 결과(있으면 숫자는 이쪽을 믿는다)
   function parseReceiptText(lines, numLines) {
     const nums = (numLines && numLines.length) ? numLines : lines;
@@ -1114,6 +1186,32 @@
     for (let i = 0; i < nums.length && !date; i++) date = grabDate(nums[i].t);
     for (let i = 0; i < texts.length && !date; i++) date = grabDate(texts[i]);
 
+<<<<<<< HEAD
+    /* --- 상호: 라벨 모양이 어떻든 잡고, 미덥잖으면 차라리 비워둔다 --- */
+    let place = '';
+    for (let i = 0; i < lines.length && !place; i++) {
+      const m = texts[i].match(PLACE_LABEL);
+      if (!m) continue;
+      let cand = tidyPlace(texts[i].slice(m.index + m[0].length));
+      if (!looksLikePlace(cand) && lines[i + 1]) cand = tidyPlace(texts[i + 1]);
+      if (looksLikePlace(cand)) place = cand;
+    }
+
+    if (!place) {
+      // 라벨이 없으면 점수를 매겨 고르되, 점수가 낮으면 아무것도 넣지 않는다
+      const maxH = Math.max.apply(null, lines.map(function (l) { return l.h || 1; }));
+      let top = null;
+      lines.forEach(function (l, i) {
+        const cand = tidyPlace(l.t);
+        if (!looksLikePlace(cand)) return;
+        let sc = 0;
+        if (PLACE_HINT.test(cand)) sc += 3;
+        sc += ((l.h || 1) / maxH) * 2;
+        if (i < Math.max(4, lines.length * 0.35)) sc += 0.8;
+        if (!top || sc > top.sc) top = { sc: sc, v: cand };
+      });
+      if (top && top.sc >= 3) place = top.v;
+=======
     /* --- 상호 --- */
     let place = '';
     const p = joined.match(/(?:상\s*호|가맹점\s*명|상\s*호\s*명)\s*[:：]?\s*([^\n]+)/);
@@ -1139,6 +1237,7 @@
         })
         .sort(function (a, b) { return b.h - a.h; })[0];
       if (top) place = tidyPlace(top.t);
+>>>>>>> 5397deabc9fa569bd9f1b7e730c7147d32f9f1e1
     }
 
     return { date: date || '', place: place, amount: amount };
