@@ -134,6 +134,8 @@
         </span>
       </div>
 
+      <div class="batches" id="batches"></div>
+
       <div class="months" id="months" hidden></div>
 
       <div class="tablewrap">
@@ -353,6 +355,40 @@
   .import-bar .btn { background: rgba(255,255,255,.75); }
   .import-bar .btn.primary { background: var(--blue); color: #fff; }
 
+  .batches { padding: 0 22px 4px; display: flex; flex-direction: column; gap: 8px; }
+  .b-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .b-head span { font-size: 13px; font-weight: 700; }
+  .b-head .btn { padding: 6px 10px; font-size: 12px; }
+  .b-card { padding: 12px 14px; border-radius: 14px; background: var(--soft); }
+  .b-card.done { background: var(--blue-tint); }
+  .b-top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+  .b-name { font-size: 13.5px; font-weight: 700; }
+  .b-name em { font-style: normal; font-weight: 500; color: var(--muted); font-size: 12px; }
+  .b-fig { font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .b-card.done .b-fig { color: var(--blue); }
+  .b-bar { height: 7px; border-radius: 999px; background: #e4e8ed; overflow: hidden; margin: 9px 0 7px; }
+  .b-bar span { display: block; height: 100%; background: var(--blue); border-radius: 999px; }
+  .b-foot { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-size: 11.5px; color: var(--muted); }
+  .b-foot .over { color: var(--blue); font-weight: 600; }
+  .b-foot .btn { padding: 4px 8px; font-size: 11.5px; }
+  .b-edit { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+  .b-edit input {
+    flex: 1; min-width: 90px; padding: 8px 10px; border: 0; border-radius: 10px;
+    background: var(--surface); font-family: inherit; font-size: 13px; font-variant-numeric: tabular-nums;
+  }
+  .b-edit input:focus { outline: 2px solid var(--blue); outline-offset: -2px; }
+  .b-pool { font-size: 11.5px; color: var(--muted); padding: 2px 2px 0; }
+
+  select.b-pick {
+    width: 100%; border: 0; border-radius: 10px; padding: 7px 6px; margin: 2px 0;
+    font-family: inherit; font-size: 12px; color: var(--muted); background: transparent;
+    -webkit-appearance: none; appearance: none; cursor: pointer;
+  }
+  select.b-pick:hover { background: var(--soft); }
+  select.b-pick:focus { outline: 2px solid var(--blue); outline-offset: -2px; background: var(--surface); }
+  select.b-pick.set { color: var(--blue); font-weight: 600; }
+  .c-batch { width: 96px; }
+
   .months { padding: 0 22px 16px; display: flex; flex-direction: column; gap: 8px; }
   .month-row {
     display: grid; grid-template-columns: 64px 1fr auto; align-items: center; gap: 12px;
@@ -421,6 +457,7 @@
     .capture-actions { flex-direction: column; }
     .capture-actions .btn { width: 100%; padding: 15px; font-size: 15px; }
     .toolbar { padding: 14px 18px; }
+    .batches { padding: 0 18px 4px; }
     .months { padding: 0 18px 14px; }
     .month-row { grid-template-columns: 56px 1fr auto; gap: 10px; padding: 9px 12px; }
     .import-bar { margin: 0 18px 14px; flex-direction: column; align-items: stretch; }
@@ -434,10 +471,12 @@
     #table tbody tr {
       display: grid; align-items: center; gap: 0 8px;
       grid-template-columns: minmax(0, 1fr) 100px 34px;
-      grid-template-areas: "place amount del" "date amount del";
+      grid-template-areas: "place amount del" "date amount del" "batch batch batch";
       padding: 10px 18px; border-top: 1px solid var(--line);
     }
-    #table.slim tbody tr { grid-template-areas: "date amount del"; }
+    #table.slim tbody tr { grid-template-areas: "date amount del" "batch batch batch"; }
+    #table tbody td.c-batch { grid-area: batch; width: auto; }
+    #table tbody td.c-batch select { text-align: left; padding-left: 8px; }
     #table tbody td { display: block; padding: 0; border: 0; min-width: 0; width: auto; }
     #table tbody td.c-place { grid-area: place; }
     #table tbody td.c-date { grid-area: date; width: auto; }
@@ -482,7 +521,7 @@
     { id: 'card', label: '카드 영수증', goal: 200000, mode: 'target', hint: '카드 매출전표를 올리세요' },
     { id: 'taxi', label: '택시 영수증', goal: 600000, mode: 'cap', slim: true, hint: '택시 영수증을 올리세요. 일시와 금액만 기록합니다' }
   ];
-  const BLANK = () => ({ cash: [], card: [], taxi: [], _del: {}, _dirty: [] });
+  const BLANK = () => ({ cash: [], card: [], taxi: [], goals: {}, _del: {}, _dirty: [], _goalDirty: [] });
 
   let store = BLANK();
   let active = 'cash';
@@ -579,6 +618,7 @@
     return {
       id: rec.id, vault: vault, kind: kind,
       occurred_at: rec.date || '', place: rec.place || '', items: rec.items || '',
+      batch: rec.batch || '',
       amount: Number(rec.amount) || 0, deleted: !!deleted,
       updated_at: rec.updated_at || nowISO()
     };
@@ -606,7 +646,7 @@
 
   async function pull() {
     if (!vault || !navigator.onLine) return;
-    const url = SB_URL + '/rest/v1/receipts?select=id,kind,occurred_at,place,items,amount,deleted,updated_at' +
+    const url = SB_URL + '/rest/v1/receipts?select=id,kind,occurred_at,place,items,batch,amount,deleted,updated_at' +
                 '&vault=eq.' + encodeURIComponent(vault);
     const res = await fetch(url, { headers: headers() });
     if (!res.ok) throw new Error('받기 실패 ' + res.status);
@@ -624,8 +664,49 @@
       if (!store[row.kind]) return;
       store[row.kind].push({
         id: row.id, date: row.occurred_at || '', place: row.place || '',
-        items: row.items || '', amount: Number(row.amount) || 0, updated_at: row.updated_at
+        items: row.items || '', batch: row.batch || '',
+        amount: Number(row.amount) || 0, updated_at: row.updated_at
       });
+    });
+    await saveLocal();
+  }
+
+  async function pushGoals() {
+    if (!vault || !store._goalDirty.length || !navigator.onLine) return;
+    const batch = [];
+    store._goalDirty.forEach(function (id) {
+      const g = store.goals[id];
+      const parts = id.split('|');
+      batch.push({
+        vault: vault, kind: parts[0], batch: parts[1],
+        goal: g ? (Number(g.goal) || 0) : 0,
+        deleted: !g, updated_at: (g && g.updated_at) || nowISO()
+      });
+    });
+    if (!batch.length) { store._goalDirty = []; return; }
+    const res = await fetch(SB_URL + '/rest/v1/batch_goals', {
+      method: 'POST',
+      headers: Object.assign(headers(), { 'Prefer': 'resolution=merge-duplicates,return=minimal' }),
+      body: JSON.stringify(batch)
+    });
+    if (!res.ok) throw new Error('그룹 목표 올리기 실패 ' + res.status);
+    store._goalDirty = [];
+    await saveLocal();
+  }
+
+  async function pullGoals() {
+    if (!vault || !navigator.onLine) return;
+    const res = await fetch(SB_URL + '/rest/v1/batch_goals?select=kind,batch,goal,deleted,updated_at' +
+      '&vault=eq.' + encodeURIComponent(vault), { headers: headers() });
+    if (!res.ok) throw new Error('그룹 목표 받기 실패 ' + res.status);
+    const remote = await res.json();
+    remote.forEach(function (row) {
+      const id = row.kind + '|' + row.batch;
+      if (store._goalDirty.indexOf(id) >= 0) return;
+      const mine = store.goals[id];
+      if (mine && (mine.updated_at || '') >= row.updated_at) return;
+      if (row.deleted) delete store.goals[id];
+      else store.goals[id] = { goal: Number(row.goal) || 0, updated_at: row.updated_at };
     });
     await saveLocal();
   }
@@ -636,7 +717,9 @@
     setSync('wait', '동기화 중…');
     try {
       await push();
+      await pushGoals();
       await pull();
+      await pullGoals();
       render();
       syncStatusIdle();
     } catch (e) {
@@ -664,6 +747,120 @@
       b.innerHTML = '<strong>' + t.label + '</strong><span class="n">' + mark + '</span>';
       b.addEventListener('click', () => { active = t.id; hideImportBar(); render(); });
       nav.appendChild(b);
+    });
+  }
+
+  /* ---------- 정산월 그룹 ---------- */
+  const gid = b => active + '|' + b;
+  const bLabel = b => (+String(b).slice(5, 7)) + '월분';
+
+  function batchList() {
+    const out = {};
+    Object.keys(store.goals).forEach(function (k) {
+      const p = k.split('|');
+      if (p[0] === active) out[p[1]] = true;
+    });
+    rows().forEach(function (r) { if (r.batch) out[r.batch] = true; });
+    return Object.keys(out).sort();
+  }
+
+  // 정산월 b가 받아들이는 결제월 (앞뒤 한 달)
+  function windowOf(b) {
+    const y = +b.slice(0, 4), m = +b.slice(5, 7);
+    return [-1, 0, 1].map(function (d) {
+      const dt = new Date(y, m - 1 + d, 1);
+      return dt.getFullYear() + '-' + pad(dt.getMonth() + 1);
+    });
+  }
+
+  function batchStat(b) {
+    const goal = (store.goals[gid(b)] || {}).goal || 0;
+    let sum = 0, n = 0, bad = 0;
+    const win = windowOf(b);
+    rows().forEach(function (r) {
+      if (r.batch !== b) return;
+      sum += Number(r.amount) || 0; n += 1;
+      const mo = String(r.date || '').slice(0, 7);
+      if (mo && win.indexOf(mo) < 0) bad += 1;
+    });
+    return { goal: goal, sum: sum, n: n, bad: bad, win: win };
+  }
+
+  function setGoal(b, amount) {
+    const id = gid(b);
+    if (amount == null) delete store.goals[id];
+    else store.goals[id] = { goal: Math.max(0, Math.round(amount)), updated_at: nowISO() };
+    if (store._goalDirty.indexOf(id) < 0) store._goalDirty.push(id);
+    save(); render();
+  }
+
+  function renderBatches() {
+    const box = $('batches');
+    const list = batchList();
+    let html = '<div class="b-head"><span>정산월 그룹</span>' +
+      '<button class="btn" data-b-add="1">그룹 추가</button></div>';
+
+    if (!list.length) {
+      html += '<p class="b-pool">정산월을 만들면 영수증을 달별로 묶어 목표를 따로 관리할 수 있습니다. 각 정산월은 앞뒤 한 달 결제분까지 받습니다.</p>';
+    }
+
+    list.forEach(function (b) {
+      const st = batchStat(b);
+      const left = st.goal - st.sum;
+      const pct = st.goal > 0 ? Math.min(100, st.sum / st.goal * 100) : 0;
+      const done = st.goal > 0 && left <= 0;
+      html += '<div class="b-card' + (done ? ' done' : '') + '">' +
+        '<div class="b-top"><span class="b-name">' + bLabel(b) +
+          ' <em>' + (+st.win[0].slice(5, 7)) + '~' + (+st.win[2].slice(5, 7)) + '월 결제분</em></span>' +
+          '<span class="b-fig">' + st.sum.toLocaleString('ko-KR') +
+          (st.goal > 0 ? ' / ' + st.goal.toLocaleString('ko-KR') : '') + '</span></div>' +
+        (st.goal > 0 ? '<div class="b-bar"><span style="width:' + pct.toFixed(1) + '%"></span></div>' : '') +
+        '<div class="b-foot"><span>' + st.n + '건' +
+          (st.goal > 0 ? (done ? ' · <span class="over">달성, 초과 ' + won(-left) + '은 다음 달로</span>'
+                              : ' · ' + won(left) + ' 부족') : ' · 목표 미설정') +
+          (st.bad ? ' · <span class="over">기간 밖 ' + st.bad + '건</span>' : '') + '</span>' +
+          '<span><button class="btn quiet" data-b-edit="' + b + '">목표 수정</button>' +
+          '<button class="btn quiet danger" data-b-del="' + b + '">그룹 삭제</button></span></div>' +
+        '</div>';
+    });
+
+    const un = rows().filter(function (r) { return !r.batch; });
+    if (list.length) {
+      html += '<p class="b-pool">미배정 ' + un.length + '건 · ' +
+        won(un.reduce(function (s, r) { return s + (Number(r.amount) || 0); }, 0)) +
+        ' — 아래 목록에서 정산월을 골라 넣으세요.</p>';
+    }
+    box.innerHTML = html;
+
+    box.querySelectorAll('[data-b-add]').forEach(function (el) {
+      el.addEventListener('click', function () {
+        const now = new Date();
+        const def = now.getFullYear() + '-' + pad(now.getMonth() + 1);
+        const b = (prompt('정산월을 입력하세요 (예: ' + def + ')', def) || '').trim();
+        if (!/^\d{4}-\d{2}$/.test(b)) return;
+        const g = prompt(bLabel(b) + ' 목표 금액을 입력하세요', '0');
+        if (g === null) return;
+        setGoal(b, parseInt(String(g).replace(/[^\d]/g, ''), 10) || 0);
+      });
+    });
+    box.querySelectorAll('[data-b-edit]').forEach(function (el) {
+      el.addEventListener('click', function () {
+        const b = el.getAttribute('data-b-edit');
+        const cur = (store.goals[gid(b)] || {}).goal || 0;
+        const g = prompt(bLabel(b) + ' 목표 금액', String(cur));
+        if (g === null) return;
+        setGoal(b, parseInt(String(g).replace(/[^\d]/g, ''), 10) || 0);
+      });
+    });
+    box.querySelectorAll('[data-b-del]').forEach(function (el) {
+      el.addEventListener('click', function () {
+        const b = el.getAttribute('data-b-del');
+        if (!confirm(bLabel(b) + ' 그룹을 지웁니다. 영수증은 미배정으로 돌아갑니다.')) return;
+        rows().forEach(function (r) {
+          if (r.batch === b) { r.batch = ''; touch(r); }
+        });
+        setGoal(b, null);
+      });
     });
   }
 
@@ -782,13 +979,17 @@
     $('count').textContent = rows().length;
     $('total').textContent = used.toLocaleString('ko-KR');
     $('empty').hidden = rows().length > 0;
+    renderBatches();
     renderMonths();
 
     const slim = !!c.slim;
+    const bl = batchList();
     $('table').classList.toggle('slim', slim);
     $('thead').innerHTML = '<tr><th class="c-date">일시</th>' +
       (slim ? '' : '<th class="c-place">장소</th><th class="c-item">품목</th>') +
-      '<th class="c-amt">금액</th><th class="c-del"></th></tr>';
+      '<th class="c-amt">금액</th>' +
+      (bl.length ? '<th class="c-batch">정산월</th>' : '') +
+      '<th class="c-del"></th></tr>';
     $('totalLabel').setAttribute('colspan', slim ? '1' : '3');
 
     const tb = $('tbody');
@@ -796,13 +997,22 @@
     rows().forEach(r => {
       const tr = document.createElement('tr');
       tr.dataset.row = r.id;
+      const opts = ['<option value="">미배정</option>'].concat(bl.map(function (b) {
+        return '<option value="' + b + '"' + (r.batch === b ? ' selected' : '') + '>' + bLabel(b) + '</option>';
+      })).join('');
       tr.innerHTML =
         '<td class="c-date"><input class="mono" data-f="date" value="' + esc(r.date) + '" placeholder="2026-08-01 12:00"></td>' +
         (slim ? '' :
           '<td class="c-place"><input data-f="place" value="' + esc(r.place) + '" placeholder="상호"></td>' +
           '<td class="c-item"><input data-f="items" value="' + esc(r.items) + '" placeholder="품목"></td>') +
         '<td class="c-amt"><input class="mono amt" data-f="amount" inputmode="numeric" value="' + (Number(r.amount) || 0).toLocaleString('ko-KR') + '"></td>' +
+        (bl.length ? '<td class="c-batch"><select class="b-pick' + (r.batch ? ' set' : '') + '">' + opts + '</select></td>' : '') +
         '<td class="c-del"><button class="del" aria-label="삭제">×</button></td>';
+
+      const sel = tr.querySelector('select');
+      if (sel) sel.addEventListener('change', function () {
+        r.batch = sel.value; touch(r); save(); render();
+      });
 
       tr.querySelectorAll('input').forEach(inp => {
         inp.addEventListener('change', () => {
