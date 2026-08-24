@@ -1,13 +1,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>회사한테 밥값 받을라고 만들었다 </title>
+<title>영수증 증빙</title>
 
 <div id="app">
   <div class="shell">
 
     <header class="appbar">
       <div class="appbar-main">
-        <h1>회사한테 밥값 받을라고 만들었다</h1>
+        <h1>영수증 증빙</h1>
         <span class="rule"></span>
         <span class="deadline">마감 2026-09-14</span>
       </div>
@@ -1094,7 +1094,6 @@
     return t.replace(/\s{2,}/g, ' ').trim();
   }
 
-<<<<<<< HEAD
   // 상호 라벨: '상호 :', '상호명', '[매장명]', '(가맹점명)', '점포명' 등 어떤 모양이든
   const PLACE_LABEL = /[\[\(【｢「]?\s*(?:상\s*호(?:\s*명)?|가\s*맹\s*점(?:\s*명)?|매\s*장(?:\s*명)?|점\s*포(?:\s*명)?|업\s*소(?:\s*명)?|사\s*업\s*장(?:\s*명)?|지\s*점\s*명|store\s*name|shop\s*name|merchant)\s*[\]\)】｣」]?\s*[:：\-]?\s*/i;
   // 상호일 법한 낱말
@@ -1118,8 +1117,6 @@
     return true;
   }
 
-=======
->>>>>>> 5397deabc9fa569bd9f1b7e730c7147d32f9f1e1
   // lines: 글자 인식 결과 / numLines: 숫자 전용 인식 결과(있으면 숫자는 이쪽을 믿는다)
   function parseReceiptText(lines, numLines) {
     const nums = (numLines && numLines.length) ? numLines : lines;
@@ -1186,7 +1183,6 @@
     for (let i = 0; i < nums.length && !date; i++) date = grabDate(nums[i].t);
     for (let i = 0; i < texts.length && !date; i++) date = grabDate(texts[i]);
 
-<<<<<<< HEAD
     /* --- 상호: 라벨 모양이 어떻든 잡고, 미덥잖으면 차라리 비워둔다 --- */
     let place = '';
     for (let i = 0; i < lines.length && !place; i++) {
@@ -1211,33 +1207,6 @@
         if (!top || sc > top.sc) top = { sc: sc, v: cand };
       });
       if (top && top.sc >= 3) place = top.v;
-=======
-    /* --- 상호 --- */
-    let place = '';
-    const p = joined.match(/(?:상\s*호|가맹점\s*명|상\s*호\s*명)\s*[:：]?\s*([^\n]+)/);
-    if (p && !/^(정보|내역|명)$/.test(p[1].trim())) place = p[1];
-    if (!tidyPlace(place)) {
-      place = '';
-      const c = texts.find(function (l) {
-        return /점$|㈜|\(주\)|주식회사|택시/.test(l) && !NOISE.test(l) && !/주소|정보/.test(l);
-      });
-      if (c) place = c;
-    }
-    place = tidyPlace(place);
-    if (!place) {
-      // 그래도 못 찾으면 위쪽에서 한글이 들어간 가장 큰 줄을 후보로 넣는다
-      const top = lines.slice(0, Math.max(6, Math.ceil(lines.length * 0.4)))
-        .filter(function (l) {
-          const t = l.t;
-          if (NOISE.test(t) || /주소|정보|영수증|Receipt/i.test(t)) return false;
-          if (!/[가-힣]/.test(t)) return false;
-          if ((t.match(/[가-힣]/g) || []).length < 2) return false;
-          if (moneyIn(t).length || grabDate(t)) return false;
-          return true;
-        })
-        .sort(function (a, b) { return b.h - a.h; })[0];
-      if (top) place = tidyPlace(top.t);
->>>>>>> 5397deabc9fa569bd9f1b7e730c7147d32f9f1e1
     }
 
     return { date: date || '', place: place, amount: amount };
@@ -1720,6 +1689,10 @@
   });
 
   $('reset').addEventListener('click', () => {
+    if (!vault && !rows().length) {
+      alert('아직 기기 연결이 안 된 상태입니다. 먼저 동기화 키를 넣어 내역을 불러오세요.');
+      return;
+    }
     if (!confirm(cfg().label + ' 내역을 모두 지웁니다. 계속할까요?')) return;
     rows().forEach(r => { store._del[r.id] = { at: nowISO(), kind: active }; markDirty(r.id); });
     store[active] = [];
@@ -1824,6 +1797,33 @@
     if (changed) saveLocal();
   }
 
-  loadLocal().then(function () { tidyPlaces(); render(); return syncNow(); });
+  // 주소에 키가 붙어 있으면 그대로 연결한다 (버튼이 안 눌릴 때의 우회로)
+  async function vaultFromUrl() {
+    let raw = '';
+    try {
+      const h = String(location.hash || '');
+      const q = String(location.search || '');
+      let m = h.match(/[#&]key=([^&]+)/) || q.match(/[?&]key=([^&]+)/);
+      if (m) raw = decodeURIComponent(m[1]);
+    } catch (e) {}
+    raw = raw.trim();
+    if (raw.length < 16) return false;
+    await saveVault(raw);
+    try { history.replaceState(null, '', location.pathname); } catch (e) {}
+    return true;
+  }
+
+  loadLocal().then(function () {
+    return vaultFromUrl();
+  }).then(function () {
+    tidyPlaces();
+    render();
+    // 키가 없으면 연결 창을 처음부터 열어 둔다
+    if (!vault) {
+      $('syncPanel').hidden = false;
+      $('vaultNote').textContent = '기기 연결이 풀렸습니다. 쓰시던 동기화 키를 넣으면 서버에 있는 내역이 그대로 돌아옵니다.';
+    }
+    return syncNow();
+  });
 })();
 </script>
